@@ -1,0 +1,1758 @@
+<title>Beacon Pool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@400;700&display=swap">
+<style>
+/* Layout: one-screen app. Truck-art header + Lahore map + a leafy sheet (left column on desktop, bottom sheet on phones). Deliberately single-theme: bright truck-art on cream, like painted rickshaw panels. */
+:root{
+  color-scheme:light;
+  --navy:#061D7B; --navy-2:#0B2A9E; --gold:#FFC72C; --gold-soft:#FFE08A; --red:#E4002B; --pink:#E6007E;
+  --teal:#14A3A8; --green:#13915A; --green-d:#0F6B3A; --lime:#9BD14B; --cream:#FFF8EC; --leaf-bg:#F4FAEE;
+  --ink:#1E2433; --muted:#4F586E; --line:#D9DFC9; --sky:#BFE9EC;
+  --f-display:'Bungee', Impact, 'Arial Black', sans-serif;
+  --f-body:'Rubik', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-ur:'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Urdu Typesetting', serif;
+  --stripe:repeating-linear-gradient(135deg,#E4002B 0 10px,#FFC72C 10px 20px,#13915A 20px 30px,#FFFFFF 30px 34px);
+  --map-h:46%; --panel:clamp(380px, 31vw, 500px);
+  --ease-out:cubic-bezier(.2,.8,.2,1); --spring:cubic-bezier(.3,1.5,.5,1);
+}
+html,body{height:100%;overscroll-behavior:none}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{margin:0;background:var(--cream);color:var(--ink);font:15px/1.45 var(--f-body);-webkit-font-smoothing:antialiased;overflow:hidden;-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;-webkit-user-select:none;user-select:none}
+:focus-visible{outline:3px solid var(--pink);outline-offset:2px;border-radius:10px}
+h1,h2,h3{margin:0;font-family:var(--f-display);font-weight:400;line-height:1.08;letter-spacing:.005em;text-wrap:balance;color:var(--navy)}
+h1{font-size:1.45rem}
+h2{font-size:1.05rem}
+p{margin:0}
+.ur{font-family:var(--f-ur);direction:rtl;unicode-bidi:isolate;line-height:1.9}
+
+/* ---------- frame ---------- */
+.app{height:100%;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto var(--map-h) minmax(0,1fr) auto;grid-template-areas:"top" "map" "stage" "tabs";position:relative;transition:grid-template-rows .55s var(--ease-out)}
+.top{grid-area:top;background:var(--navy);color:#fff;position:relative;z-index:6}
+.top::before{content:"";display:block;height:7px;background:var(--stripe)}
+.brand{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 16px 8px}
+.brand-l{display:flex;align-items:center;gap:10px;min-width:0}
+.brand b{font-family:var(--f-display);font-weight:400;font-size:1.35rem;line-height:1;color:var(--gold);text-shadow:2px 2px 0 var(--green);white-space:nowrap}
+.brand small{display:block;font-size:.68rem;letter-spacing:.08em;color:#BFD0FF;margin-top:3px;white-space:nowrap}
+.brand .ur{font-size:1.05rem;color:#fff;text-shadow:2px 2px 0 var(--pink)}
+.vine{height:20px;background-color:var(--cream);background-repeat:repeat-x;background-size:120px 26px;background-position:0 center;border-top:3px solid var(--gold);border-bottom:1px solid #E6E0C8}
+
+.map-wrap{grid-area:map;min-height:0;position:relative;overflow:hidden;background:#FFF8EC;touch-action:none}
+#map{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab}
+#map.drag{cursor:grabbing}
+.map-ctrl{position:absolute;right:12px;bottom:34px;display:flex;flex-direction:column;gap:8px;z-index:3}
+.map-ctrl button{width:40px;height:40px;border-radius:12px;border:2.5px solid var(--navy);background:#fff;display:grid;place-items:center;box-shadow:2px 2px 0 var(--navy);transition:transform .12s var(--ease-out),box-shadow .12s}
+.map-ctrl button:active{transform:translate(2px,2px);box-shadow:0 0 0 var(--navy)}
+.map-ctrl svg{width:18px;height:18px}
+.attrib{position:absolute;left:10px;top:8px;font-size:.6rem;color:#8A8F9E;z-index:2;pointer-events:none}
+
+.pin{position:absolute;left:50%;top:50%;z-index:4;pointer-events:none;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center}
+.pin .stem{transition:transform .25s var(--spring)}
+.pin.lift .stem{transform:translateY(-14px)}
+.pin .shadow{width:18px;height:6px;border-radius:50%;background:rgba(6,29,123,.3);margin-top:-3px;transition:transform .25s var(--ease-out),opacity .25s}
+.pin.lift .shadow{transform:scale(.6);opacity:.5}
+.pin.drop .stem{animation:pindrop .5s var(--spring)}
+@keyframes pindrop{0%{transform:translateY(-40px)}60%{transform:translateY(3px)}100%{transform:none}}
+.pin-tip{position:absolute;bottom:calc(100% + 6px);white-space:nowrap;background:var(--navy);color:#fff;font-size:.78rem;font-weight:600;padding:6px 11px;border-radius:10px;box-shadow:0 0 0 2px var(--gold);transition:opacity .3s,transform .3s var(--ease-out)}
+.pin-tip::after{content:"";position:absolute;left:50%;bottom:-6px;margin-left:-6px;border:6px solid transparent;border-bottom:0;border-top-color:var(--navy)}
+.pin.lift .pin-tip{opacity:0;transform:translateY(6px)}
+
+.sheet{grid-area:stage;margin-top:-22px;min-height:0;position:relative;z-index:4;background-color:var(--leaf-bg);background-size:150px 150px;border-radius:24px 24px 0 0;box-shadow:0 -10px 26px rgba(6,29,123,.16);display:flex;flex-direction:column;transition:margin-top .55s var(--ease-out),border-radius .4s}
+.handle{flex:none;width:44px;height:5px;border-radius:3px;background:rgba(6,29,123,.22);margin:9px auto 0}
+.view{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:12px 16px 28px;display:flex;flex-direction:column;gap:16px;scroll-behavior:smooth}
+.app.full{--map-h:0%}
+.app.setup{--map-h:38%}
+.app.full .sheet{border-radius:0;margin-top:0}
+.app.full .handle{display:none}
+
+.tabs{grid-area:tabs;position:relative;z-index:7;background:var(--navy);display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:5px 6px calc(4px + env(safe-area-inset-bottom,0px))}
+.tabs::before{content:"";position:absolute;left:0;right:0;top:0;height:5px;background:var(--stripe)}
+.tab{position:relative;border:0;background:none;color:#BFD0FF;padding:8px 4px 2px;display:flex;flex-direction:column;align-items:center;gap:0;border-radius:12px;transition:color .2s,transform .12s}
+.tab:active{transform:scale(.94)}
+.tab svg{width:22px;height:22px;transition:transform .3s var(--spring)}
+.tab span{font-family:var(--f-display);font-size:.72rem;line-height:1.2;margin-top:3px}
+.tab .ur{font-size:.66rem;line-height:1.6;color:inherit;opacity:.85}
+.tab[aria-selected="true"]{color:var(--gold)}
+.tab[aria-selected="true"] svg{transform:translateY(-2px) scale(1.12)}
+.tab .badge{position:absolute;top:4px;left:calc(50% + 8px);min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--pink);color:#fff;font:700 .68rem/18px var(--f-body);text-align:center;box-shadow:0 0 0 2px var(--navy)}
+
+@media (min-width:900px), (orientation:landscape) and (min-width:640px) and (max-height:560px){:root:not(.phone) .map-ctrl{bottom:16px}:root:not(.phone) .app{grid-template-columns:var(--panel) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);grid-template-areas:"top top" "tabs map" "stage map"}:root:not(.phone) .map-wrap{grid-area:map;border-left:3px solid var(--navy)}:root:not(.phone) .sheet{grid-area:stage;margin-top:0!important;border-radius:0;box-shadow:none}:root:not(.phone) .handle{display:none}:root:not(.phone) .tabs{padding:5px 8px 4px}:root:not(.phone) .tab{flex-direction:row;justify-content:center;gap:8px;padding:10px 4px 6px}:root:not(.phone) .tab span{margin:0;font-size:.8rem}:root:not(.phone) .tab .ur{display:none}:root:not(.phone) .tab .badge{position:static;margin-left:2px}:root:not(.phone) .brand b{font-size:1.6rem}
+}
+
+/* ---------- shared pieces ---------- */
+.stack{display:flex;flex-direction:column;gap:10px}
+.row{display:flex;align-items:center;gap:10px}
+.eyebrow{font-family:var(--f-display);font-size:.7rem;letter-spacing:.06em;color:var(--green)}
+.sub{color:var(--muted);font-size:.9rem}
+.ur-sub{font-family:var(--f-ur);direction:rtl;text-align:left;color:var(--green-d);font-size:.95rem;line-height:1.9;margin-top:-4px}
+.fine{font-size:.76rem;color:var(--muted)}
+.btn{position:relative;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:50px;padding:0 18px;border-radius:14px;border:2.5px solid var(--navy);background:#fff;color:var(--navy);font-weight:700;font-size:1rem;box-shadow:3px 3px 0 var(--navy);transition:transform .12s var(--ease-out),box-shadow .12s,background .2s,opacity .2s}
+.btn:active:not(:disabled){transform:translate(3px,3px);box-shadow:0 0 0 var(--navy)}
+.btn.primary{background:var(--gold)}
+.btn.green{background:var(--green);color:#fff}
+.btn.pink{background:var(--pink);color:#fff}
+.btn.wide{width:100%}
+.btn:disabled{opacity:.55;cursor:not-allowed;box-shadow:1px 1px 0 var(--navy)}
+.btn svg{width:20px;height:20px;flex:none}
+.link{border:0;background:none;padding:6px 0;color:var(--navy);font-weight:600;font-size:.85rem;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;text-decoration-color:var(--gold)}
+.link.danger{color:var(--red);text-decoration-color:rgba(228,0,43,.35)}
+.rip{position:absolute;border-radius:50%;background:currentColor;opacity:.22;transform:scale(0);animation:rip .55s var(--ease-out) forwards;pointer-events:none}
+@keyframes rip{to{transform:scale(1);opacity:0}}
+
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{position:relative;overflow:hidden;border:2px solid var(--navy);background:#fff;color:var(--navy);border-radius:999px;padding:6px 13px;font-size:.84rem;font-weight:600;transition:background .2s,color .2s,transform .12s}
+.chip:active{transform:scale(.95)}
+.chip[aria-pressed="true"]{background:var(--navy);color:var(--gold)}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:4px;padding:4px;border-radius:14px;background:#fff;border:2px solid var(--navy)}
+.seg button{position:relative;overflow:hidden;border:0;background:none;padding:9px 6px;border-radius:10px;font-weight:700;font-size:.85rem;color:var(--muted);transition:background .25s,color .25s}
+.seg button[aria-pressed="true"]{background:var(--navy);color:var(--gold)}
+
+.card{background:#fff;border:2.5px solid var(--navy);border-radius:16px;box-shadow:3px 3px 0 var(--green);padding:14px}
+.search{position:relative}
+.field{display:flex;flex-direction:column;gap:6px;font-size:.8rem;font-weight:700;color:var(--navy);min-width:0}
+.input{width:100%;min-height:48px;padding:0 14px;border-radius:12px;border:2.5px solid var(--navy);background:#fff;outline:none;font-size:1rem;transition:box-shadow .2s}
+.input:focus{box-shadow:0 0 0 4px rgba(255,199,44,.6)}
+.sug{position:absolute;left:0;right:0;top:calc(100% + 6px);background:#fff;border:2.5px solid var(--navy);border-radius:14px;box-shadow:3px 3px 0 var(--navy);z-index:10;overflow:hidden;animation:pop .2s var(--ease-out)}
+.sug button{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:none;padding:11px 14px;font-weight:600;color:var(--navy)}
+.sug button:hover,.sug button:focus-visible{background:#FFF1CC;outline:none}
+.sug small{font-weight:400;color:var(--muted)}
+.or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:.78rem}
+.or::before,.or::after{content:"";flex:1;height:1.5px;background:var(--line)}
+.privacy{display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:14px;background:var(--pink);color:#fff;box-shadow:inset 0 0 0 2px var(--gold)}
+.privacy img{width:38px;height:38px;flex:none}
+.privacy b{display:block;font-size:.88rem}
+.privacy .ur{font-size:.95rem;color:var(--gold-soft);line-height:1.8}
+.sticky-cta{position:sticky;bottom:-28px;margin:0 -16px -28px;padding:12px 16px 16px;background:linear-gradient(rgba(244,250,238,0),var(--leaf-bg) 30%);display:flex;flex-direction:column;gap:6px;z-index:3}
+.stepper{display:flex;align-items:center;gap:14px}
+.stepper button{width:44px;height:44px;border-radius:50%;border:2.5px solid var(--navy);background:#fff;font-weight:800;font-size:1.2rem;color:var(--navy);transition:transform .12s}
+.stepper button:active{transform:scale(.9)}
+.stepper output{font-family:var(--f-display);font-size:1.6rem;min-width:2ch;text-align:center;color:var(--navy)}
+.row2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:10px}
+
+/* entrance */
+.enter>*{animation:up .5s var(--ease-out) both;animation-delay:calc(var(--i,0) * 55ms)}
+@keyframes up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes pop{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+
+/* finding */
+.finding{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:26px 8px}
+.finding img{width:74px;height:74px;animation:spin 2.4s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.dots::after{content:"";animation:dots 1.2s steps(4) infinite}
+@keyframes dots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}
+
+/* pool */
+.hello{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.icon-btn{position:relative;overflow:hidden;width:42px;height:42px;flex:none;border-radius:12px;border:2.5px solid var(--navy);background:#fff;display:grid;place-items:center;box-shadow:2px 2px 0 var(--navy);transition:transform .12s,box-shadow .12s}
+.icon-btn:active{transform:translate(2px,2px);box-shadow:none}
+.icon-btn svg{width:18px;height:18px}
+.radius{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.9rem;color:var(--muted)}
+.radius b{color:var(--navy)}
+.mini-seg{display:inline-flex;gap:3px;padding:3px;border-radius:999px;background:#fff;border:2px solid var(--navy)}
+.mini-seg button{position:relative;overflow:hidden;border:0;background:none;border-radius:999px;padding:4px 10px;font-weight:700;font-size:.78rem;color:var(--muted);transition:background .2s,color .2s}
+.mini-seg button[aria-pressed="true"]{background:var(--navy);color:var(--gold)}
+.banner{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;border:2px dashed var(--teal);background:#E8F7F6;font-size:.82rem;color:var(--ink)}
+.route-card{display:flex;flex-direction:column;gap:12px}
+.plate-row{display:flex;gap:12px;align-items:center}
+.plate{flex:none;width:118px;height:56px;background:#fff;border:3px solid #111;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:2px 2px 0 var(--green)}
+.plate small{font:700 .5rem/1 var(--f-body);letter-spacing:.2em;color:var(--green-d)}
+.plate b{font:400 1.25rem/1.1 var(--f-display);color:#111}
+.plate-row strong{display:block;font-size:1.05rem;color:var(--navy)}
+.plate-row span{font-size:.82rem;color:var(--muted)}
+.stops{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.stop{font-weight:700;font-size:.8rem;color:var(--navy);background:#fff;border:2px solid var(--navy);border-radius:8px;padding:3px 8px}
+.stops.pop .stop{animation:pop .35s var(--spring) both;animation-delay:calc(var(--i,0) * 70ms)}
+.stop.me{background:var(--pink);border-color:var(--pink);color:#fff}
+.stop.school{background:var(--navy);color:var(--gold)}
+.chev{color:var(--green);font:400 .9rem var(--f-display)}
+
+.ride{display:flex;flex-direction:column;gap:12px;background:var(--green);color:#fff;border-color:var(--navy);box-shadow:3px 3px 0 var(--navy)}
+.ride h2{color:var(--gold-soft)}
+.ride p{font-size:.86rem;color:#E6F6EA}
+.ride .btn{border-color:var(--navy)}
+.progress{display:flex;align-items:center;gap:10px}
+.bar{flex:1;height:12px;border-radius:6px;background:rgba(255,255,255,.25);overflow:hidden;box-shadow:inset 0 0 0 2px rgba(6,29,123,.35)}
+.bar i{display:block;height:100%;width:0;border-radius:6px;background:repeating-linear-gradient(135deg,#FFC72C 0 8px,#FFE08A 8px 16px);transition:width 1.1s var(--ease-out)}
+.progress img{width:30px;height:30px;flex:none}
+.progress small{font-size:.78rem;white-space:nowrap}
+.done-tag{display:flex;align-items:center;justify-content:center;gap:8px;min-height:50px;border-radius:14px;background:rgba(255,255,255,.14);border:2px dashed rgba(255,224,138,.6);font-weight:700;color:var(--gold-soft);animation:pop .4s var(--spring)}
+
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.tile{background:#fff;border:2px solid var(--navy);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tile b{font:400 1.12rem/1.05 var(--f-display);color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.tile span{font-size:.7rem;color:var(--muted);font-weight:600}
+.tile.co2{background:#E3F4DA}.tile.fuel{background:#FFF1CC}.tile.rs{background:#FFE3F1}
+
+.riders{display:flex;flex-direction:column;gap:10px}
+.rider{display:grid;grid-template-columns:48px minmax(0,1fr);gap:12px;padding:12px;border-radius:16px;background:#fff;border:2px solid var(--navy);transition:box-shadow .25s,transform .25s,border-color .25s}
+.rider.in{box-shadow:4px 4px 0 var(--pink)}
+.rider.flash{animation:flash 1s var(--ease-out)}
+@keyframes flash{0%,100%{transform:none}30%{transform:scale(1.025)}}
+.fav{position:relative;width:48px;height:48px}
+.fav img{width:48px;height:48px;display:block}
+.fav b{position:absolute;left:14px;top:14px;width:20px;height:20px;border-radius:50%;background:#fff;border:2px solid var(--navy);font:400 9px/16px var(--f-display);text-align:center;color:var(--navy)}
+.who{min-width:0;display:flex;flex-direction:column;gap:2px}
+.who-top{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.who-top b{font-size:1rem;color:var(--navy)}
+.tag{font-size:.68rem;font-weight:700;padding:1px 8px;border-radius:999px;background:#EEF0F6;color:var(--muted)}
+.tag.ex{background:none;border:1.5px dashed var(--teal);color:#0D7D81}
+.where{font-size:.8rem;color:var(--muted)}
+.where b{color:var(--ink);font-weight:600}
+.acts{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.acts button{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:6px;min-height:38px;border:2px solid var(--navy);border-radius:10px;padding:0 12px;font-size:.82rem;font-weight:700;background:#fff;color:var(--navy);transition:background .2s,color .2s,transform .12s}
+.acts button:active:not(:disabled){transform:scale(.95)}
+.acts button.on{background:var(--pink);border-color:var(--pink);color:#fff}
+.acts button:disabled{opacity:.45;cursor:not-allowed}
+.acts svg{width:15px;height:15px}
+.empty{padding:22px 16px;border-radius:16px;border:2px dashed var(--line);text-align:center;display:flex;flex-direction:column;gap:6px;align-items:center;color:var(--muted);background:rgba(255,255,255,.6)}
+.empty img{width:46px;height:46px}
+.empty b{font-family:var(--f-display);font-weight:400;color:var(--navy)}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.confirm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.85rem;animation:pop .25s var(--ease-out)}
+.confirm button{border:2px solid var(--navy);border-radius:10px;padding:5px 10px;font-weight:700;background:#fff;color:var(--navy)}
+.confirm button.yes{background:var(--red);border-color:var(--red);color:#fff}
+
+/* bagh */
+.bagh-head{display:flex;justify-content:space-between;align-items:flex-end;gap:10px}
+.bagh-head h1{font-size:1.55rem}
+.bagh-head h1 em{font-style:normal;color:var(--green)}
+.bagh-wrap{position:relative;align-self:center;width:100%;max-width:400px;filter:drop-shadow(4px 4px 0 var(--navy))}
+.bagh-svg{display:block;width:100%;height:auto}
+.plus-more{position:absolute;right:10px;bottom:10px;background:var(--navy);color:var(--gold);font:400 .72rem var(--f-display);padding:4px 9px;border-radius:999px}
+.tree-sway{animation:sway 3.8s ease-in-out infinite alternate;animation-delay:var(--d,0s)}
+@keyframes sway{from{transform:rotate(-2.4deg)}to{transform:rotate(2.4deg)}}
+.tree-grow{animation:grow 1s var(--spring) both;animation-delay:.25s}
+@keyframes grow{from{transform:scale(0)}to{transform:scale(1)}}
+.burst{animation:burst 1.1s var(--ease-out) both;animation-delay:.5s;opacity:0}
+@keyframes burst{0%{opacity:1;transform:translate(0,0) scale(.4)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) rotate(200deg) scale(1)}}
+.bob{animation:bob 1.6s ease-in-out infinite;animation-delay:var(--d,0s)}
+@keyframes bob{0%,70%,100%{transform:translateY(0)}78%{transform:translateY(-2.5px)}86%{transform:translateY(0)}92%{transform:translateY(-1.5px)}}
+.flyer{animation:fly 14s linear infinite;animation-delay:var(--d,2s)}
+@keyframes fly{0%{transform:translate(-40px,110px)}40%{transform:translate(400px,40px)}100%{transform:translate(400px,40px)}}
+.flap{animation:flap .28s ease-in-out infinite alternate;transform-box:fill-box;transform-origin:50% 100%}
+@keyframes flap{from{transform:scaleY(1)}to{transform:scaleY(-.6)}}
+.flutter{animation:flutter 5s ease-in-out infinite;animation-delay:var(--d,0s)}
+@keyframes flutter{0%,100%{transform:translate(0,0)}25%{transform:translate(9px,-7px)}50%{transform:translate(2px,-13px)}75%{transform:translate(-8px,-5px)}}
+.wing{animation:wing .22s ease-in-out infinite alternate;transform-box:fill-box;transform-origin:100% 50%}
+.wing.r{transform-origin:0% 50%}
+@keyframes wing{from{transform:scaleX(1)}to{transform:scaleX(.25)}}
+.shimmer{animation:shimmer 2.4s linear infinite}
+@keyframes shimmer{to{stroke-dashoffset:-24}}
+.fount{animation:fount 2.6s ease-out infinite;transform-box:fill-box;transform-origin:center;animation-delay:var(--d,0s)}
+@keyframes fount{from{transform:scale(.4);opacity:.9}to{transform:scale(1.5);opacity:0}}
+.sapling-glow{animation:glow 1.8s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+@keyframes glow{0%,100%{opacity:.5}50%{opacity:1}}
+.pledge{display:flex;flex-direction:column;gap:12px;background:var(--navy);color:#fff;border-color:var(--navy);box-shadow:3px 3px 0 var(--green)}
+.pledge h2{color:var(--gold)}
+.pledge ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.pledge li{display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:center;font-size:.86rem;color:#E4EAFF}
+.pledge li b{color:#fff}
+.pledge li i{width:34px;height:34px;border-radius:50%;background:var(--gold);color:var(--navy);display:grid;place-items:center;font:400 .9rem var(--f-display);font-style:normal}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.stat{background:#fff;border:2px solid var(--navy);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.stat b{font:400 1.2rem/1.1 var(--f-display);color:var(--navy);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat span{font-size:.74rem;color:var(--muted);font-weight:600}
+.demo{align-self:center;border:2px dashed var(--teal);background:#E8F7F6;color:#0D6E72;border-radius:999px;padding:7px 14px;font-weight:700;font-size:.8rem;position:relative;overflow:hidden;transition:transform .12s}
+.demo:active{transform:scale(.95)}
+.switch{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.88rem;font-weight:600;padding:10px 14px;border-radius:14px;background:#fff;border:2px solid var(--navy);color:var(--navy)}
+.switch input{appearance:none;-webkit-appearance:none;width:48px;height:28px;border-radius:14px;background:#C9CEDB;position:relative;flex:none;cursor:pointer;transition:background .2s;margin:0}
+.switch input::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .25s var(--spring)}
+.switch input:checked{background:var(--green)}
+.switch input:checked::after{left:23px}
+
+/* chat */
+.threads{display:flex;flex-direction:column;gap:10px}
+.thread{position:relative;overflow:hidden;display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 12px;border-radius:14px;background:#fff;border:2.5px solid var(--navy);box-shadow:3px 3px 0 var(--teal);text-align:left;width:100%;transition:transform .12s,box-shadow .12s}
+.thread:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--teal)}
+.thread p{font-size:.84rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.thread .dot{width:12px;height:12px;border-radius:50%;background:var(--pink);box-shadow:0 0 0 3px #FFD6EA}
+.chat{display:flex;flex-direction:column;gap:12px;min-height:100%}
+.chat-head{display:flex;align-items:center;gap:10px}
+.msgs{display:flex;flex-direction:column;gap:10px;padding:4px 0;flex:1}
+.panel{align-self:flex-start;max-width:82%;background:#fff;border:2.5px solid var(--navy);border-radius:12px 12px 12px 3px;overflow:hidden;box-shadow:3px 3px 0 var(--navy)}
+.panel .band{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 10px;font:400 .72rem var(--f-display);color:var(--navy)}
+.panel .band i{display:flex;gap:3px}.panel .band i::before,.panel .band i::after{content:"";width:5px;height:5px;border-radius:50%;background:var(--navy)}
+.panel .body{padding:6px 11px 7px;font-size:.93rem;overflow-wrap:anywhere}
+.mine{align-self:flex-end;max-width:82%;background:var(--red);color:#fff;border:2.5px solid var(--gold);border-radius:12px 12px 3px 12px;box-shadow:3px 3px 0 var(--navy);padding:7px 12px;font-size:.93rem;overflow-wrap:anywhere}
+.tm{display:block;font-size:.66rem;opacity:.7;margin-top:2px}
+.new{animation:msgin .45s var(--spring) both}
+@keyframes msgin{from{opacity:0;transform:translateY(10px) scale(.92)}to{opacity:1;transform:none}}
+.sticker{align-self:flex-start;display:flex;flex-direction:column;align-items:center;padding:8px 18px 10px;border-radius:50% 50% 46% 54% / 60% 60% 40% 40%;border:4px solid var(--gold);box-shadow:0 0 0 3px var(--navy),4px 6px 0 3px rgba(6,29,123,.22);transform:rotate(-4deg);color:#fff}
+.sticker.mine-s{align-self:flex-end;transform:rotate(3deg)}
+.sticker .ur{font-size:1.2rem;line-height:1.8;text-shadow:2px 2px 0 var(--navy)}
+.sticker small{font-size:.58rem;letter-spacing:.1em;font-weight:700;color:var(--gold-soft)}
+.typing{align-self:flex-start;display:flex;gap:4px;padding:10px 14px;background:#fff;border:2px solid var(--navy);border-radius:12px}
+.typing i{width:7px;height:7px;border-radius:50%;background:var(--navy);animation:typ 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes typ{0%,60%,100%{transform:none;opacity:.4}30%{transform:translateY(-4px);opacity:1}}
+.stick-tray{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 8px;scrollbar-width:none}
+.stick-tray::-webkit-scrollbar{display:none}
+.stk{flex:none;position:relative;overflow:hidden;height:40px;padding:0 13px;border-radius:20px;border:2.5px solid var(--gold);box-shadow:0 0 0 2px var(--navy);font-family:var(--f-ur);font-size:.85rem;line-height:1;color:#fff;transition:transform .15s var(--spring)}
+.stk:active{transform:scale(.9) rotate(-3deg)}
+.qr{flex:none;position:relative;overflow:hidden;height:40px;padding:0 13px;border-radius:20px;border:2px solid var(--navy);background:#fff;color:var(--navy);font-weight:600;font-size:.82rem;transition:transform .12s}
+.qr:active{transform:scale(.94)}
+.composer{position:sticky;bottom:-28px;margin:0 -16px -28px;padding:8px 16px 14px;background:linear-gradient(rgba(244,250,238,0),var(--leaf-bg) 25%);display:flex;flex-direction:column;gap:2px;z-index:3}
+.composer form{display:flex;gap:8px}
+.composer .input{min-height:48px}
+.send{position:relative;overflow:hidden;flex:none;width:52px;height:48px;border-radius:12px;border:2.5px solid var(--navy);background:var(--gold);display:grid;place-items:center;box-shadow:2px 2px 0 var(--red);transition:transform .12s}
+.send:active{transform:scale(.92)}
+.safety{display:flex;gap:8px;align-items:center;font-size:.76rem;color:var(--muted);padding:8px 12px;border-radius:12px;background:#fff;border:1.5px solid var(--line)}
+
+/* overlays */
+.toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;background:var(--navy);color:#fff;padding:11px 16px;border-radius:14px;font-weight:600;font-size:.88rem;z-index:40;max-width:calc(100% - 32px);text-align:center;box-shadow:0 0 0 2.5px var(--gold),0 8px 20px rgba(0,0,0,.2);transition:opacity .25s,transform .35s var(--spring);pointer-events:none}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+@media (min-width:900px), (orientation:landscape) and (min-width:640px) and (max-height:560px){:root:not(.phone) .toast{left:calc(var(--panel) / 2);bottom:28px}}
+
+.splash{position:fixed;inset:0;z-index:50;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px 16px;text-align:center;transition:opacity .5s,transform .6s var(--ease-out);overflow:hidden}
+.splash::before,.splash::after{content:"";position:absolute;left:0;right:0;height:12px;background:var(--stripe)}
+.splash::before{top:0}.splash::after{bottom:0}
+.splash.out{opacity:0;transform:scale(1.04);pointer-events:none}
+.splash .title{font-family:var(--f-display);font-size:clamp(2.2rem,11vw,3.6rem);line-height:1;color:var(--gold);text-shadow:4px 4px 0 var(--green);display:flex;flex-wrap:wrap;justify-content:center;gap:0 .35em}
+.splash .title span{display:inline-block;animation:letter .6s var(--spring) both}
+@keyframes letter{from{opacity:0;transform:translateY(-40px) rotate(-12deg)}to{opacity:1;transform:none}}
+.splash .ur{font-size:1.5rem;color:#fff;text-shadow:2px 2px 0 var(--pink);animation:up .6s var(--ease-out) both;animation-delay:.65s}
+.splash .tagline{font-size:1rem;color:#D7E1FF;animation:up .6s var(--ease-out) both;animation-delay:.8s;max-width:30ch}
+.splash .rk{width:min(320px,80vw);height:auto;animation:drive 1.3s cubic-bezier(.2,.9,.25,1) both;animation-delay:.05s}
+@keyframes drive{0%{transform:translateX(120vw)}70%{transform:translateX(-10px)}85%{transform:translateX(4px)}100%{transform:none}}
+.splash .road{width:min(360px,90vw);height:10px;border-radius:5px;background:repeating-linear-gradient(90deg,#FFC72C 0 26px,transparent 26px 44px),#1E2433;margin-top:-22px}
+.splash .btn{margin-top:8px;animation:up .6s var(--ease-out) both;animation-delay:.95s;min-width:220px}
+.splash small{color:#9FB0E8;font-size:.75rem;animation:up .6s var(--ease-out) both;animation-delay:1.05s}
+.splash .vine-s{position:absolute;left:0;right:0;height:26px;background-repeat:repeat-x;background-size:120px 26px;opacity:.95}
+
+.celebrate{position:fixed;inset:0;z-index:45;display:grid;place-items:center;padding:16px;background:rgba(6,29,123,.55);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);animation:fadein .3s both}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.celebrate .box{position:relative;width:min(360px,100%);background:var(--cream);border:3px solid var(--navy);border-radius:22px;box-shadow:5px 5px 0 var(--green),inset 0 0 0 3px var(--gold);padding:20px 18px 18px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;animation:pop .45s var(--spring) both}
+.celebrate svg{width:170px;height:170px}
+.celebrate h2{font-size:1.45rem;color:var(--green)}
+.celebrate p{font-size:.9rem;color:var(--ink)}
+.petal{position:fixed;top:-40px;width:26px;height:26px;z-index:46;pointer-events:none;animation:fall linear forwards}
+@keyframes fall{to{transform:translate(var(--dx),var(--fall,110vh)) rotate(var(--r))}}
+
+/* ---------- v2: one question, one car, one list ---------- */
+#root{height:100%;position:relative}
+.nm{color:var(--navy)}
+.btn.sm{min-height:44px;padding:0 16px;font-size:.92rem;box-shadow:2px 2px 0 var(--navy)}
+.me-btn{position:relative;overflow:hidden;flex:none;width:54px;height:54px;border-radius:50%;border:2.5px solid var(--navy);background:#fff;display:grid;place-items:center;padding:0;box-shadow:2px 2px 0 var(--navy);transition:transform .12s}
+.me-btn:active{transform:scale(.92)}
+.today{display:flex;flex-direction:column;gap:6px}
+.today>span{font-family:var(--f-display);font-size:.72rem;letter-spacing:.06em;color:var(--green)}
+.seg.big button{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 8px;font-size:1rem;min-height:50px}
+.seg.big svg{width:24px;height:24px;flex:none}
+.role-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.role-card{position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:14px 12px;border-radius:16px;border:2.5px solid var(--navy);background:#fff;text-align:left;color:var(--navy);box-shadow:3px 3px 0 var(--navy);transition:background .2s,color .2s,transform .12s,box-shadow .12s}
+.role-card:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--navy)}
+.role-card svg{width:40px;height:40px}
+.role-card b{font-size:1rem}
+.role-card span{font-size:.78rem;color:var(--muted);font-weight:500;line-height:1.3}
+.role-card[aria-pressed="true"]{background:var(--navy);color:var(--gold)}
+.role-card[aria-pressed="true"] span{color:#D7E1FF}
+.car{display:flex;flex-direction:column;gap:12px}
+.car-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pill{display:inline-flex;align-items:center;gap:4px;font-weight:700;font-size:.78rem;padding:4px 10px;border-radius:999px;background:#E3F4DA;color:var(--green-d);border:2px solid var(--green);white-space:nowrap}
+.pill svg{width:14px;height:14px}
+.pill.full{background:#FFE3E8;color:var(--red);border-color:var(--red)}
+.seats{display:flex;gap:8px;overflow-x:auto;padding:8px 2px 2px;scrollbar-width:none}
+.seats::-webkit-scrollbar{display:none}
+.seat{flex:none;width:66px;display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center;font-size:.76rem;font-weight:700;color:var(--navy);position:relative;animation:pop .35s var(--spring) both}
+.seat .ring{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;position:relative}
+.seat.filled .ring{background:#FFE3F1}
+.seat.me .ring{background:#FFF1CC}
+.seat .fav b{font-size:9px}
+.seat.free .ring{border:2.5px dashed #9AA3BF;color:#9AA3BF}
+.seat.free .ring svg{width:20px;height:20px}
+.seat.free{color:#9AA3BF}
+.seat.wait .ring{border:2.5px dashed var(--pink);animation:spin 6s linear infinite}
+.seat.wait .ring .fav{animation:spin 6s linear infinite reverse}
+.seat small{font-weight:600;color:var(--muted);font-size:.66rem;white-space:nowrap}
+.seat .ord{position:absolute;left:-2px;top:-2px;width:20px;height:20px;border-radius:50%;background:var(--navy);color:var(--gold);font:400 .62rem/20px var(--f-display);font-style:normal;text-align:center}
+.seat .x{position:absolute;top:-4px;right:0;width:24px;height:24px;border-radius:50%;background:#fff;border:2px solid var(--navy);color:var(--navy);display:grid;place-items:center;padding:0}
+.seat .x svg{width:11px;height:11px}
+.plan{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;background:#FFF1CC;border:2px dashed var(--gold);font-size:.88rem;color:var(--ink)}
+.plan b{color:var(--navy)}
+.steps3{display:flex;gap:6px;flex-wrap:wrap}
+.steps3 span{font-size:.72rem;font-weight:700;background:#fff;border:2px solid var(--navy);border-radius:999px;padding:2px 9px;color:var(--navy)}
+.empty-car{flex-direction:row;align-items:center}
+.empty-car img{width:104px;flex:none}
+.car.waiting{border-style:dashed;box-shadow:3px 3px 0 var(--gold)}
+.req{display:flex;flex-direction:column;gap:12px;border-color:var(--pink);box-shadow:4px 4px 0 var(--pink);animation:pop .45s var(--spring) both}
+.req .sub{color:var(--ink);font-weight:600}
+.btn-row{display:flex;gap:8px}
+.btn-row .btn{flex:1;min-height:48px;font-size:.95rem}
+.people{display:flex;flex-direction:column;gap:10px}
+.person{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px;border-radius:16px;background:#fff;border:2px solid var(--navy);cursor:pointer;transition:box-shadow .25s,transform .2s,opacity .2s}
+@media (hover:hover){.person:hover{box-shadow:3px 3px 0 var(--teal)}}
+.person.sel{box-shadow:4px 4px 0 var(--pink);border-color:var(--pink)}
+.person.off{opacity:.55}
+.person.flash{animation:flash 1s var(--ease-out)}
+.meta{display:flex;align-items:center;gap:6px;font-size:.8rem;font-weight:700;color:var(--green-d);flex-wrap:wrap}
+.meta svg{width:17px;height:17px;flex:none}
+.meta.needs{color:#B4005F}
+.sdots{display:inline-flex;gap:3px}
+.sdots i{width:9px;height:9px;border-radius:50%;background:var(--green);border:1.5px solid var(--green-d)}
+.sdots i.t{background:#fff;border-color:#9AA3BF}
+.act{display:flex;flex-direction:column;align-items:center;gap:2px}
+.wait-chip{display:inline-flex;align-items:center;gap:2px;font-weight:700;font-size:.8rem;color:#8A5C00;background:#FFF1CC;border:2px dashed var(--gold);border-radius:999px;padding:7px 11px;white-space:nowrap}
+.wait-chip .dots::after{content:"";animation:dots 1.2s steps(4) infinite}
+.full-chip{font-weight:700;font-size:.8rem;color:var(--muted);background:#EEF0F6;border-radius:999px;padding:7px 12px}
+.list-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.stamps{display:flex;flex-direction:column;gap:12px}
+.week{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.dcol{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:.7rem;font-weight:700;color:var(--muted)}
+.day{position:relative;width:100%;max-width:56px;aspect-ratio:1;border-radius:50%;border:2.5px dashed #C9CEDB;background:#fff;display:grid;place-items:center;font:400 .7rem var(--f-display);color:var(--pink);padding:0;overflow:visible}
+.day img{position:absolute;inset:-5px;width:calc(100% + 10px);height:calc(100% + 10px);animation:stamp .55s var(--spring) both}
+.day.done{border:2.5px solid var(--navy);background:#FFF1CC}
+.day.today{border:3px dashed var(--pink);background:#FFE3F1;animation:pulse 1.3s ease-in-out infinite;cursor:pointer}
+.day.future{opacity:.4}
+.day.missed{background:#F3F4F8}
+@keyframes stamp{from{transform:scale(1.9) rotate(-28deg);opacity:0}to{transform:none;opacity:1}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+.grow{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:#E3F4DA;font-size:.9rem;color:var(--ink)}
+.grow svg{width:56px;height:60px;flex:none}
+.grow b{color:var(--green-d)}
+.plant-grow{animation:pop .6s var(--spring) both;transform-box:fill-box;transform-origin:50% 100%}
+/* phone preview frame (only in the phone build on wide screens) */
+.phone-notes{display:none}
+html.framed,html.framed body{background:#061D7B}
+html.framed body{display:flex;align-items:center;justify-content:center;gap:56px;padding:20px 16px;background-image:linear-gradient(rgba(6,29,123,.9),rgba(6,29,123,.9)),var(--stripe)}
+html.framed #root{width:390px;height:min(844px,calc(100% - 8px));flex:none;border-radius:46px;overflow:hidden;transform:translateZ(0);box-shadow:0 0 0 10px #111,0 0 0 14px #FFC72C,0 30px 60px rgba(0,0,0,.45)}
+html.framed .phone-notes{display:flex;flex-direction:column;gap:18px;max-width:300px;color:#fff}
+.phone-notes h1{color:var(--gold);font-size:2rem;text-shadow:3px 3px 0 var(--green)}
+.phone-notes .ur{color:#fff;font-size:1.2rem;text-shadow:2px 2px 0 var(--pink)}
+.phone-notes ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.phone-notes li{display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:center;font-size:.95rem;color:#D7E1FF}
+.phone-notes li b{color:#fff}
+.phone-notes li i{width:34px;height:34px;border-radius:50%;background:var(--gold);color:var(--navy);display:grid;place-items:center;font:400 .9rem var(--f-display);font-style:normal}
+.phone-notes p{font-size:.85rem;color:#9FB0E8}
+@media (max-width:860px){html.framed .phone-notes{display:none}}
+
+
+/* ---------- every screen: phones, phones sideways, 16:9 and 16:10 laptops, big monitors ---------- */
+@supports (height:100dvh){#root{height:100dvh}}
+#root{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);background:var(--navy)}
+.top{padding-top:env(safe-area-inset-top,0px)}
+.splash{padding-top:max(24px,env(safe-area-inset-top,0px));padding-bottom:max(24px,env(safe-area-inset-bottom,0px))}
+.splash .rk{max-height:30vh;width:auto;max-width:min(320px,80vw)}
+.splash .title{font-size:clamp(2rem,min(11vw,8.5vh),3.6rem)}
+input,select,textarea{font-size:max(16px,1rem)}
+/* short screens: phones turned sideways, 1366x768 laptops */
+@media (max-height:760px){.vine{height:14px;background-size:96px 21px}.brand{padding-block:6px}.brand b{font-size:1.2rem}}
+@media (max-height:560px){.vine{display:none}.brand small{display:none}.tab .ur{display:none}.tab{padding-top:6px}.view{padding-top:10px;gap:12px}h1{font-size:1.25rem}
+  .splash{gap:8px}.splash .tagline,.splash small{display:none}}
+@media (orientation:landscape) and (max-height:560px){:root:not(.phone) .tabs{padding:3px 6px}:root:not(.phone) .tab{padding:6px 4px}}
+/* big 16:9 and 16:10 monitors */
+@media (min-width:1600px) and (min-height:860px){body{font-size:16px}h1{font-size:1.6rem}.brand b{font-size:1.8rem}.view{padding:16px 22px 32px;gap:18px}}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+@media (max-width:380px){h1{font-size:1.25rem}.tile b{font-size:.98rem}.brand small{display:none}}
+</style>
+
+<aside class="phone-notes" aria-label="About this preview"><h1>BEACON POOL</h1><span class="ur" lang="ur">ساتھ چلیں، باغ اگائیں</span>
+  <ol><li><i>1</i><span><b>Drop your pin.</b> Classmates only see a 300 m circle.</span></li><li><i>2</i><span><b>Driving or riding?</b> Invite kids who need a ride, or ask a car going your way.</span></li><li><i>3</i><span><b>Stamp each ride.</b> Every 22 kg of CO₂ saved grows a real tree.</span></li></ol>
+  <p>This is the live app at phone size. Tap around.</p></aside>
+<div id="root">
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand">
+      <div class="brand-l">
+        <img id="logo" alt="" width="34" height="34">
+        <div><b>BEACON POOL</b><small>BEACONHOUSE · GARDEN TOWN</small></div>
+      </div>
+      <span class="ur" lang="ur">بیکن پول</span>
+    </div>
+    <div class="vine" id="vine" aria-hidden="true"></div>
+  </header>
+
+  <main class="map-wrap" id="map-wrap" aria-label="Map of Lahore">
+    <canvas id="map"></canvas>
+    <div class="pin" id="pin" hidden>
+      <span class="pin-tip" id="pin-tip">Drag the map to your street</span>
+      <svg class="stem" width="42" height="54" viewBox="0 0 42 54" aria-hidden="true"><path d="M21 52S38 34 38 20C38 10 30.4 3 21 3S4 10 4 20c0 14 17 32 17 32Z" fill="#E6007E" stroke="#061D7B" stroke-width="3"/><circle cx="21" cy="20" r="8" fill="#FFC72C" stroke="#061D7B" stroke-width="2.5"/></svg>
+      <span class="shadow"></span>
+    </div>
+    <div class="map-ctrl">
+      <button id="zin" aria-label="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="#061D7B" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button id="zout" aria-label="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="#061D7B" stroke-width="3" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+      <button id="zfit" aria-label="Show my route"><svg viewBox="0 0 24 24" fill="none" stroke="#061D7B" stroke-width="2.6" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    </div>
+    <span class="attrib">Roads & parks © OpenStreetMap</span>
+  </main>
+
+  <section class="sheet" id="sheet">
+    <div class="handle" aria-hidden="true"></div>
+    <div class="view" id="view"></div>
+  </section>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button class="tab" role="tab" data-tab="route" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19c4-1 3-7 8-8s5-6 8-7"/><circle cx="4" cy="19" r="2.2"/><circle cx="20" cy="4" r="2.2"/></svg><span>Route</span><span class="ur" lang="ur">راستہ</span></button>
+    <button class="tab" role="tab" data-tab="chats" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M4 5h16v11H10l-6 4z"/></svg><span>Gup Shup</span><span class="ur" lang="ur">گپ شپ</span><b class="badge" id="badge" hidden></b></button>
+    <button class="tab" role="tab" data-tab="bagh" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21v-7"/><circle cx="12" cy="9" r="6"/><path d="M8 21h8"/></svg><span>Bagh</span><span class="ur" lang="ur">باغ</span></button>
+  </nav>
+</div>
+
+<div class="splash" id="splash" role="dialog" aria-label="Welcome to Beacon Pool">
+  <div class="vine-s" id="splash-vine" style="top:12px"></div>
+  <img class="rk" id="splash-rk" alt="A painted Lahore rickshaw with a roof garden">
+  <div class="road" aria-hidden="true"></div>
+  <div class="title" aria-label="Beacon Pool"><span style="animation-delay:.35s">BEACON</span><span style="animation-delay:.5s">POOL</span></div>
+  <div class="ur" lang="ur">ساتھ چلیں، باغ اگائیں</div>
+  <p class="tagline">Share the school run. Every ride grows a real tree for Lahore.</p>
+  <button class="btn primary" id="go">Find my carpool</button>
+  <small>For Beaconhouse Garden Town · 112 Garden Block</small>
+  <div class="vine-s" id="splash-vine2" style="bottom:12px;transform:scaleY(-1)"></div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+</div>
+
+<script type="application/json" id="art-data">/*ART*/</script>
+<script type="application/json" id="graph-data">/*GRAPH*/</script>
+<script>
+(() => {
+"use strict";
+/* ================= numbers behind every saving ================= */
+const FUEL_PRICE = 382.02;   // Rs per litre petrol, government rate for 21 Oct 2026
+const KM_PER_L = 11;         // typical 1000-1300cc car in Lahore traffic
+const CO2_PER_L = 2.31;      // kg CO2 per litre of petrol burnt
+const SOLO_LEGS = 4;         // each family: drop-off there & back + pick-up there & back
+const CITY_KMH = 22;         // school-rush speed on Lahore roads
+const TREE_KG = 22;          // kg CO2 one grown tree absorbs in a year = 1 tree in your bagh
+const FUZZ = 300;            // classmates only ever see a 300 m area
+const MAX_POOL = 4;          // students per car
+const PLOTS_MAX = 64;
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const PHONE = /*PHONE*/false;
+
+const ART = JSON.parse(document.getElementById('art-data').textContent);
+const G = JSON.parse(document.getElementById('graph-data').textContent);
+const KX = G.kx, KY = G.ky, LAT0 = G.origin[0], LON0 = G.origin[1];
+const toXY = (lat, lon) => ({x:(lon - LON0) * KX, y:-(lat - LAT0) * KY});
+const toLL = (x, y) => ({lat:+(LAT0 - y / KY).toFixed(5), lon:+(LON0 + x / KX).toFixed(5)});
+const svgURL = s => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
+const innerSVG = s => s.replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+
+const AREAS = [
+ ["Garden Town",31.5083,74.3233],["Barkat Market",31.4994,74.3210],["Kalma Chowk",31.5044,74.3314],["Model Town",31.4919,74.3142],
+ ["Model Town Ext.",31.4809,74.3117],["Faisal Town",31.4725,74.3039],["Muslim Town",31.5088,74.3142],["Wahdat Colony",31.5165,74.3074],
+ ["Gulberg III",31.5168,74.3490],["Gulberg II",31.5242,74.3471],["Liberty Market",31.5103,74.3447],["Shadman",31.5343,74.3303],
+ ["Shah Jamal",31.5259,74.3275],["Ichhra",31.5297,74.3132],["Samanabad",31.5403,74.3023],["Iqbal Town",31.5108,74.2880],
+ ["Mustafa Town",31.4962,74.2720],["Sabzazar",31.5218,74.2701],["Johar Town",31.4729,74.2528],["Canal View",31.4807,74.2492],
+ ["Thokar Niaz Baig",31.4810,74.2382],["Wapda Town",31.4369,74.2700],["Township",31.4565,74.3201],["Kot Lakhpat",31.4664,74.3383],
+ ["DHA Phase 1",31.4800,74.3939],["DHA Phase 3",31.4740,74.3774],["DHA Phase 5",31.4635,74.4104],["DHA Phase 6",31.4716,74.4511],
+ ["Cavalry Ground",31.5024,74.3692],["Cantt",31.5305,74.3611],["Gulshan-e-Ravi",31.5450,74.2952],["Mozang",31.5537,74.3141],
+ ["Valencia Town",31.4067,74.2701],["Lake City",31.3536,74.2527],["Bahria Town",31.3528,74.1683]
+].map(([name, lat, lon]) => ({name, ...toXY(lat, lon)}));
+const POPULAR = ["Model Town","Faisal Town","Gulberg III","Johar Town","Muslim Town","DHA Phase 3","Iqbal Town","Township"];
+const SCHOOL = {name:"Beaconhouse", ...toXY(31.5056302, 74.3293947)};
+const CLASSES = ["Class 1","Class 2","Class 3","Class 4","Class 5","Class 6","Class 7","Class 8","O1","O2","O3","AS","A2"];
+
+/* ================= road graph + routing (OpenStreetMap) ================= */
+const NN = G.n.length / 2, NX = new Float64Array(NN), NY = new Float64Array(NN);
+for (let i = 0; i < NN; i++) { NX[i] = G.n[2*i]; NY[i] = G.n[2*i+1]; }
+const NE = G.e.length, EA = new Int32Array(NE), EB = new Int32Array(NE), EL = new Float64Array(NE), EC = new Uint8Array(NE), EG = new Array(NE);
+const deg = new Int32Array(NN);
+G.e.forEach((e, i) => { EA[i]=e[0]; EB[i]=e[1]; EL[i]=Math.max(1,e[2]); EC[i]=e[3]; EG[i]=e[5]; deg[e[0]]++; deg[e[1]]++; });
+const AS = new Int32Array(NN + 1); for (let i = 0; i < NN; i++) AS[i+1] = AS[i] + deg[i];
+const AE = new Int32Array(AS[NN]); const fillp = AS.slice(0, NN);
+for (let i = 0; i < NE; i++) { AE[fillp[EA[i]]++] = i; AE[fillp[EB[i]]++] = i; }
+const CELL = 400, grid = new Map();
+for (let i = 0; i < NN; i++) { const k = Math.floor(NX[i]/CELL) + ',' + Math.floor(NY[i]/CELL); (grid.get(k) || grid.set(k, []).get(k)).push(i); }
+function nearestNode(x, y) {
+  const cx = Math.floor(x/CELL), cy = Math.floor(y/CELL); let best = 0, bd = Infinity;
+  for (let r = 0; r < 40; r++) {
+    for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+      const l = grid.get((cx+dx) + ',' + (cy+dy)); if (!l) continue;
+      for (const n of l) { const d = Math.hypot(NX[n]-x, NY[n]-y); if (d < bd) { bd = d; best = n; } }
+    }
+    if (bd < r * CELL) break;
+  }
+  return best;
+}
+const ssspCache = new Map();
+function sssp(src) {
+  if (ssspCache.has(src)) return ssspCache.get(src);
+  const dist = new Float64Array(NN).fill(Infinity), prev = new Int32Array(NN).fill(-1), hk = [], hv = [];
+  const push = (k, v) => { let i = hk.length; hk.push(k); hv.push(v); while (i) { const p = (i-1) >> 1; if (hk[p] <= k) break; hk[i]=hk[p]; hv[i]=hv[p]; i=p; } hk[i]=k; hv[i]=v; };
+  const pop = () => { const k0=hk[0], v0=hv[0], k=hk.pop(), v=hv.pop(), n=hk.length; if (n) { let i=0; for(;;){ let c=2*i+1; if(c>=n)break; if(c+1<n&&hk[c+1]<hk[c])c++; if(hk[c]>=k)break; hk[i]=hk[c]; hv[i]=hv[c]; i=c; } hk[i]=k; hv[i]=v; } return [k0,v0]; };
+  dist[src] = 0; push(0, src);
+  while (hk.length) {
+    const [d, u] = pop(); if (d > dist[u]) continue;
+    for (let j = AS[u]; j < AS[u+1]; j++) { const e = AE[j], v = EA[e] === u ? EB[e] : EA[e], nd = d + EL[e]; if (nd < dist[v]) { dist[v] = nd; prev[v] = e; push(nd, v); } }
+  }
+  const r = {dist, prev}; ssspCache.set(src, r);
+  if (ssspCache.size > 300) ssspCache.delete(ssspCache.keys().next().value);
+  return r;
+}
+function mkPt(x, y) { const n = nearestNode(x, y); return {x, y, node:n, conn:Math.hypot(NX[n]-x, NY[n]-y) * 1.3}; }
+function roadDist(p, q) {
+  if (p.node === q.node) return Math.hypot(p.x-q.x, p.y-q.y) * 1.3;
+  if (!ssspCache.has(p.node) && ssspCache.has(q.node)) return ssspCache.get(q.node).dist[p.node] + p.conn + q.conn;
+  return sssp(p.node).dist[q.node] + p.conn + q.conn;
+}
+function legPts(p, q) {
+  const pts = [[p.x, p.y]];
+  if (p.node !== q.node) {
+    const {prev} = sssp(p.node); const chain = []; let v = q.node, guard = 0;
+    while (v !== p.node && prev[v] >= 0 && guard++ < NN) { const e = prev[v]; const u = EA[e] === v ? EB[e] : EA[e]; chain.push([e, u]); v = u; }
+    chain.reverse(); pts.push([NX[p.node], NY[p.node]]);
+    for (const [e, u] of chain) {
+      const g = EG[e], fwd = EA[e] === u, inner = [];
+      for (let i = 0; i < g.length; i += 2) inner.push([g[i], g[i+1]]);
+      if (!fwd) inner.reverse();
+      pts.push(...inner, fwd ? [NX[EB[e]], NY[EB[e]]] : [NX[EA[e]], NY[EA[e]]]);
+    }
+  }
+  pts.push([q.x, q.y]);
+  return pts;
+}
+function perms(a) { if (a.length <= 1) return [a]; const out = []; a.forEach((x, i) => perms([...a.slice(0,i), ...a.slice(i+1)]).forEach(p => out.push([x, ...p]))); return out; }
+const schoolPt = mkPt(SCHOOL.x, SCHOOL.y); sssp(schoolPt.node);
+function planPool(members) {
+  let best = null;
+  for (const o of perms(members)) {
+    let len = 0; for (let i = 0; i < o.length - 1; i++) len += roadDist(o[i].pt, o[i+1].pt);
+    len += roadDist(o[o.length-1].pt, schoolPt);
+    if (!best || len < best.len) best = {order:o, len};
+  }
+  const solo = members.reduce((s, m) => s + SOLO_LEGS * roadDist(m.pt, schoolPt), 0);
+  const pooled = 2 * best.len + 2 * roadDist(best.order[0].pt, schoolPt);
+  best.savedKmDay = members.length > 1 ? Math.max(0, solo - pooled) / 1000 : 0;
+  best.co2Day = best.savedKmDay / KM_PER_L * CO2_PER_L;
+  return best;
+}
+function routeLine(plan) {
+  const stops = [...plan.order.map(m => m.pt), schoolPt], pts = [], legs = [];
+  for (let i = 0; i < stops.length - 1; i++) { const l = legPts(stops[i], stops[i+1]); legs.push(roadDist(stops[i], stops[i+1]) / 1000); pts.push(...(i ? l.slice(1) : l)); }
+  const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i-1] + Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]));
+  return {pts, cum, total:cum[cum.length-1], legs};
+}
+
+/* ================= helpers ================= */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = (n, d = 0) => (+n).toLocaleString('en-PK', {maximumFractionDigits:d, minimumFractionDigits:d});
+const rupees = n => n >= 100000 ? fmt(n/100000, 2) + ' lakh' : fmt(n);
+const sleep = ms => new Promise(r => setTimeout(r, REDUCED ? 0 : ms));
+const clamp01 = v => Math.max(0, Math.min(1, v));
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+const easeBack = t => { const c = 1.9; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('bp-' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('bp-' + k, JSON.stringify(v)); } catch {} }
+};
+const areaOf = (x, y) => { let b = null, bd = Infinity; for (const a of AREAS) { const d = Math.hypot(a.x-x, a.y-y); if (d < bd) { bd = d; b = a; } } return bd < 2500 ? b.name : "Lahore"; };
+const fuzz = (x, y) => ({x:(Math.floor(x/FUZZ) + .5) * FUZZ, y:(Math.floor(y/FUZZ) + .5) * FUZZ});
+const initials = n => (n || '?').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+const hash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
+const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+const roleText = r => r.role === 'drive' ? `Can drive · ${r.seats} spare seat${r.seats == 1 ? '' : 's'}` : r.role === 'ride' ? 'Needs a ride' : `Drive or ride · ${r.seats} seat${r.seats == 1 ? '' : 's'}`;
+let toastT;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2800); }
+function buzz() { try { navigator.vibrate && navigator.vibrate(8); } catch {} }
+const FL = {pink:svgURL(ART.flowerPink), teal:svgURL(ART.flowerTeal), gold:svgURL(ART.flowerGold)};
+$('#logo').src = FL.gold;
+const RK = svgURL(ART.rickshaw), ROOT = document.getElementById('root');
+const VINE = `url("${svgURL(ART.vine)}")`;
+$('#vine').style.backgroundImage = VINE; $('#splash-vine').style.backgroundImage = VINE; $('#splash-vine2').style.backgroundImage = VINE;
+$('#sheet').style.backgroundImage = `url("${svgURL(ART.leafTile)}")`;
+$('#splash-rk').src = svgURL(ART.rickshaw);
+
+/* press feedback: ink ripple on every button */
+document.addEventListener('pointerdown', e => {
+  const b = e.target.closest('.btn,.chip,.seg button,.mini-seg button,.acts button,.thread,.icon-btn,.stk,.qr,.send,.demo');
+  if (!b || b.disabled) return;
+  const r = b.getBoundingClientRect(), s = Math.max(r.width, r.height) * 2.2, sp = document.createElement('span');
+  sp.className = 'rip'; sp.style.cssText = `width:${s}px;height:${s}px;left:${e.clientX - r.left - s/2}px;top:${e.clientY - r.top - s/2}px`;
+  b.appendChild(sp); setTimeout(() => sp.remove(), 600); buzz();
+});
+
+/* ================= example classmates (only while the map is quiet) ================= */
+// id, name, class, role, seats, seats already taken (by kids not shown), area, offset, CO2 saved so far
+const EXAMPLES = [
+ ["ex-hamza","Hamza","Class 8","drive",3,1,"Model Town",120,-80,96],
+ ["ex-zara","Zara","O1","ride",0,0,"Faisal Town",-150,90,74],
+ ["ex-ayaan","Ayaan","Class 7","ride",0,0,"Muslim Town",60,140,51],
+ ["ex-mahnoor","Mahnoor","O2","drive",3,3,"Barkat Market",-60,-40,130],
+ ["ex-ibrahim","Ibrahim","Class 6","ride",0,0,"Model Town Ext.",200,60,62],
+ ["ex-inaya","Inaya","Class 8","ride",0,0,"Gulberg III",-100,120,88],
+ ["ex-rayyan","Rayyan","O1","drive",2,0,"Liberty Market",80,-160,140],
+ ["ex-hania","Hania","Class 7","ride",0,0,"Johar Town",250,100,45],
+ ["ex-musa","Musa","O3","drive",3,1,"Johar Town",-500,-300,112],
+ ["ex-aleena","Aleena","Class 6","drive",2,1,"Shadman",-90,60,70],
+ ["ex-saad","Saad","Class 8","ride",0,0,"DHA Phase 3",150,-120,58],
+ ["ex-fatima","Fatima","O2","drive",2,0,"Cavalry Ground",-120,-60,99],
+ ["ex-ali","Ali","Class 5","drive",3,2,"Faisal Town",380,-260,83],
+ ["ex-eman","Eman","O1","ride",0,0,"Garden Town",-200,150,121],
+ ["ex-sara","Sara","Class 6","ride",0,0,"Faisal Town",260,330,40]
+].map(([id, name, cls, role, seats, taken, area, dx, dy, co2]) => {
+  const a = AREAS.find(z => z.name === area); const f = fuzz(a.x + dx, a.y + dy);
+  return {id, name, cls, role, seats, taken, x:f.x, y:f.y, area, co2, example:true, pt:mkPt(f.x, f.y)};
+});
+const EX_REPLIES = [
+  {text:"Assalam o Alaikum! Yes, my mum was looking for a carpool."},
+  {text:"We leave around 7:05. Does that work for you?"},
+  {sticker:"theek"},
+  {text:"My driver can do Mondays and Wednesdays. Can yours do Thursday?"},
+  {sticker:"shabash"},
+  {text:"Let me ask my parents tonight, then we'll fix the days."}
+];
+const STICKERS = {
+  shabash:{ur:"شاباش", en:"WELL DONE", c:"#13915A"},
+  theek:{ur:"ٹھیک ہے", en:"OKAY", c:"#14A3A8"},
+  jaldi:{ur:"جلدی آؤ!", en:"COME QUICK", c:"#E4002B"},
+  pappu:{ur:"پپو یار تنگ نہ کر", en:"PAPPU, DON'T BOTHER ME", c:"#E6007E"}
+};
+const QUICK = ["What time do you leave?", "I'm at the gate", "Running 5 min late", "See you tomorrow!"];
+const ICON = {
+  car:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 16v-3.5c0-.8.4-1.5 1-1.9l2-1.1 1.8-3.4c.4-.7 1.1-1.1 1.9-1.1h4.6c.8 0 1.5.4 1.9 1.1l1.8 3.4 2 1.1c.6.4 1 1.1 1 1.9V16c0 .6-.4 1-1 1H4c-.6 0-1-.4-1-1Z"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/></svg>',
+  hand:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V6a1.5 1.5 0 0 1 3 0v5"/><path d="M11 11V4.5a1.5 1.5 0 0 1 3 0V11"/><path d="M14 11V6a1.5 1.5 0 0 1 3 0v6"/><path d="M17 10a1.5 1.5 0 0 1 3 0v4a7 7 0 0 1-7 7h-1a6 6 0 0 1-4.6-2.2L4.5 15a1.5 1.5 0 0 1 2.3-1.9L8 14.5"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H10l-6 4z"/></svg>',
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="#061D7B" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>'
+};
+
+/* ================= state ================= */
+const S = {
+  tab:'route', step:1, placed:false, db:null, uid:null, canWrite:true, revealing:false,
+  me:store.get('me', null), stats:store.get('stats', {rides:[]}),
+  riders:new Map(), msgs:new Map(), exMsgs:store.get('exmsgs', {}), seen:store.get('seen', {}),
+  reqs:new Map(), showEx:store.get('showEx', null), radius:3000, showAll:false,
+  chatWith:null, baghMode:'mine', profile:false, preview:null, lastView:'', confirm:null, M:null,
+  draft:{name:'', cls:'Class 8', role:'', seats:3}
+};
+if (S.me) { if (S.me.role !== 'drive' && S.me.role !== 'ride') S.me.role = S.me.role === 'either' ? 'drive' : 'ride'; if (!S.me.seats) S.me.seats = 3; S.me.pt = mkPt(S.me.x, S.me.y); }
+store.get('exreqs', []).forEach(r => S.reqs.set(r.id, r));
+const saveExReqs = () => store.set('exreqs', [...S.reqs.values()].filter(r => r.ex));
+const isMe = id => id === 'me' || (!!S.uid && id === S.uid);
+const realRiders = () => [...S.riders.values()].filter(r => !isMe(r.id));
+const examplesOn = () => S.showEx == null ? realRiders().length < 3 : S.showEx;
+const allRiders = () => [...realRiders(), ...(examplesOn() ? EXAMPLES : [])];
+const meRider = () => S.me ? {id:'me', name:S.me.name, cls:S.me.cls, role:S.me.role, seats:S.me.seats, x:S.me.x, y:S.me.y, area:areaOf(S.me.x, S.me.y), pt:S.me.pt} : null;
+const riderById = id => isMe(id) ? meRider() : (S.riders.get(id) || EXAMPLES.find(e => e.id === id));
+const drvOf = r => r.kind === 'invite' ? r.from : r.to;
+const rdrOf = r => r.kind === 'invite' ? r.to : r.from;
+const liveReq = r => r.status === 'pending' || r.status === 'accepted';
+const iDrive = () => !!S.me && S.me.role === 'drive';
+/* trees: every 22 kg of CO2 your carpool rides save = 1 tree Beaconhouse plants */
+const poolCO2 = () => S.stats.rides.reduce((s, r) => s + r.co2, 0);
+const shareCO2 = () => S.stats.rides.reduce((s, r) => s + r.co2 / r.n, 0);
+const myTrees = () => Math.floor(poolCO2() / TREE_KG + 1e-9);
+const loggedToday = () => S.stats.rides.some(r => r.d === today());
+const ARRIVE = 7 * 60 + 40;   // school gate target, 7:40
+const clock = m => { m = Math.round(m); return Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0'); };
+
+/* One car: the driver's home first, then the best pickup order, then school. */
+function planCar(driver, riders) {
+  const d = {id:driver.id, name:driver.name, pt:driver.pt}, rs = riders.map(r => ({id:r.id, name:r.name, pt:r.pt}));
+  let best = null;
+  for (const o of perms(rs)) {
+    const order = [d, ...o]; let len = 0;
+    for (let i = 0; i < order.length - 1; i++) len += roadDist(order[i].pt, order[i+1].pt);
+    len += roadDist(order[order.length-1].pt, schoolPt);
+    if (!best || len < best.len) best = {order, len};
+  }
+  const all = [d, ...rs];
+  const solo = all.reduce((s, m) => s + SOLO_LEGS * roadDist(m.pt, schoolPt), 0);
+  const pooled = 2 * best.len + 2 * roadDist(d.pt, schoolPt);
+  best.savedKmDay = all.length > 1 ? Math.max(0, solo - pooled) / 1000 : 0;
+  best.co2Day = best.savedKmDay / KM_PER_L * CO2_PER_L;
+  let t = 0; const at = [0];
+  for (let i = 1; i < best.order.length; i++) { t += roadDist(best.order[i-1].pt, best.order[i].pt) / 1000 / CITY_KMH * 60 + 1.5; at.push(t); }
+  const total = t + roadDist(best.order[best.order.length-1].pt, schoolPt) / 1000 / CITY_KMH * 60;
+  best.mins = Math.round(total); best.times = at.map(m => clock(ARRIVE - total + m)); best.leave = best.times[0];
+  return best;
+}
+function seatsLeft(r) {
+  if (isMe(r.id)) return Math.max(0, S.me.seats - (S.M ? S.M.carRiders.length : 0));
+  const withMe = [...S.reqs.values()].some(q => q.status === 'accepted' && drvOf(q) === r.id && isMe(rdrOf(q)));
+  return Math.max(0, (r.seats || 0) - (r.taken || 0) - (r.example && withMe ? 1 : 0));
+}
+/* Everything the screens need, worked out once per render. */
+function model() {
+  if (!S.me || S.editing) return null;
+  const reqs = [...S.reqs.values()].filter(liveReq);
+  const mine = reqs.filter(r => isMe(r.from) || isMe(r.to));
+  const acc = reqs.filter(r => r.status === 'accepted');
+  const drive = iDrive();
+  let driverId = null;
+  if (drive) driverId = 'me';
+  else { const a = mine.find(r => r.status === 'accepted' && isMe(rdrOf(r))); if (a) driverId = drvOf(a); }
+  const sameDrv = id => driverId && (id === driverId || (isMe(id) && isMe(driverId)));
+  const carRiders = driverId ? [...new Set(acc.filter(r => sameDrv(drvOf(r))).map(r => isMe(rdrOf(r)) ? 'me' : rdrOf(r)))].filter(id => riderById(id)) : [];
+  const pendingWith = new Map(), incoming = [];
+  for (const r of mine) { if (r.status !== 'pending') continue; if (isMe(r.to)) { if (!carRiders.includes(r.from) && r.from !== driverId) incoming.push(r); } else if (!carRiders.includes(r.to)) pendingWith.set(r.to, r); }
+  const busy = new Set();
+  for (const r of acc) if (!(isMe(r.from) || isMe(r.to))) busy.add(rdrOf(r));
+  for (const r of realRiders()) if (r.inCar && !isMe(r.inCar)) busy.add(r.id);
+  const inCar = new Set([...carRiders, ...(driverId && !isMe(driverId) ? [driverId] : [])]);
+  const dMe = roadDist(S.me.pt, schoolPt);
+  const near = allRiders().filter(r => !inCar.has(r.id) && Math.hypot(r.x - S.me.x, r.y - S.me.y) <= S.radius).map(r => {
+    const road = roadDist(S.me.pt, r.pt); return {r, road, detour:Math.max(0, road + roadDist(r.pt, schoolPt) - dMe)};
+  });
+  const driver = driverId ? riderById(driverId) : null;
+  let cands = [];
+  if (drive) cands = near.filter(n => n.r.role === 'ride' && !busy.has(n.r.id));
+  else if (!driverId) cands = near.filter(n => n.r.role === 'drive');
+  const asked = new Map(incoming.map(q => [q.from, q]));
+  cands.forEach(n => { n.left = drive ? null : seatsLeft(n.r); n.req = pendingWith.get(n.r.id) || null; n.inq = asked.get(n.r.id) || null; });
+  cands.sort((a, b) => ((a.left === 0) - (b.left === 0)) || (a.road - b.road));
+  const plan = driver && carRiders.length ? planCar(driver, carRiders.map(riderById)) : null;
+  const myLeft = drive ? Math.max(0, S.me.seats - carRiders.length - [...pendingWith.values()].length) : 0;
+  return {drive, driverId, driver, carRiders, incoming, pendingWith, cands, candSet:new Set(cands.map(n => n.r.id)), carSet:inCar, plan, myLeft};
+}
+
+/* ================= sprites for the map ================= */
+const SPR = {};
+function sprite(key, svg) { const im = new Image(); im.onload = () => { SPR[key] = im; baseDirty = true; draw(); }; im.src = svgURL(svg); }
+sprite('pink', ART.flowerPink); sprite('teal', ART.flowerTeal); sprite('gold', ART.flowerGold); sprite('rk', ART.rickshaw);
+
+/* ================= map ================= */
+const cv = $('#map'), wrap = $('#map-wrap'), ctx = cv.getContext('2d');
+const base = document.createElement('canvas'), bctx = base.getContext('2d');
+let W = 0, H = 0, DPR = 1, baseDirty = true, raf = 0;
+const V = {cx:SCHOOL.x - 600, cy:SCHOOL.y + 1200, s:0.05};
+const A = {drop:0, ripple:0, pops:new Map(), routeT0:0, routeDur:0, mover:false, pulse:new Map(), school:0};
+let route = null, poolOrder = [];
+const C = {bg:'#FFF8EC', park:'#CDEBB8', parkEdge:'#A3D58F', water:'#5CC6C9', navy:'#061D7B', gold:'#FFC72C', pink:'#E6007E', green:'#13915A', teal:'#14A3A8', white:'#FFFFFF', r2:'#5E6797', r3:'#AEB4CC', sign:'#0F7B4A'};
+const P = {cls:[new Path2D(), new Path2D(), new Path2D(), new Path2D()], canal:new Path2D(), river:new Path2D(), parks:new Path2D()};
+for (let i = 0; i < NE; i++) { const p = P.cls[EC[i]]; p.moveTo(NX[EA[i]], NY[EA[i]]); const g = EG[i]; for (let j = 0; j < g.length; j += 2) p.lineTo(g[j], g[j+1]); p.lineTo(NX[EB[i]], NY[EB[i]]); }
+for (const x of G.x) { const p = P.cls[x[0]]; p.moveTo(x[1], x[2]); for (let j = 3; j < x.length; j += 2) p.lineTo(x[j], x[j+1]); }
+for (const w of G.w) { const p = w[0] ? P.river : P.canal; p.moveTo(w[1], w[2]); for (let j = 3; j < w.length; j += 2) p.lineTo(w[j], w[j+1]); }
+for (const q of (G.p || [])) { P.parks.moveTo(q[0], q[1]); for (let j = 2; j < q.length; j += 2) P.parks.lineTo(q[j], q[j+1]); P.parks.closePath(); }
+
+function resize() {
+  const r = wrap.getBoundingClientRect(); DPR = Math.min(2, devicePixelRatio || 1);
+  W = r.width; H = r.height;
+  for (const c of [cv, base]) { c.width = Math.max(1, Math.round(W * DPR)); c.height = Math.max(1, Math.round(H * DPR)); }
+  baseDirty = true; draw();
+}
+const sx = x => (x - V.cx) * V.s + W/2, sy = y => (y - V.cy) * V.s + H/2;
+const wx = px => (px - W/2) / V.s + V.cx, wy = py => (py - H/2) / V.s + V.cy;
+function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x+r, y); c.arcTo(x+w, y, x+w, y+h, r); c.arcTo(x+w, y+h, x, y+h, r); c.arcTo(x, y+h, x, y, r); c.arcTo(x, y, x+w, y, r); c.closePath(); }
+function drawBase() {
+  const c = bctx; c.setTransform(DPR, 0, 0, DPR, 0, 0); c.fillStyle = C.bg; c.fillRect(0, 0, W, H);
+  c.setTransform(DPR*V.s, 0, 0, DPR*V.s, DPR*(W/2 - V.cx*V.s), DPR*(H/2 - V.cy*V.s));
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  const z = Math.max(.55, Math.min(1.7, V.s / .1)), px = v => v * z / V.s;
+  c.fillStyle = C.park; c.fill(P.parks); c.strokeStyle = C.parkEdge; c.lineWidth = px(1); c.stroke(P.parks);
+  c.strokeStyle = C.water; c.lineWidth = px(10); c.stroke(P.river); c.lineWidth = px(5); c.stroke(P.canal);
+  if (V.s > .045) { c.strokeStyle = C.r3; c.lineWidth = px(1.5); c.stroke(P.cls[3]); }
+  if (V.s > .022) { c.strokeStyle = C.white; c.lineWidth = px(4.6); c.stroke(P.cls[2]); c.strokeStyle = C.r2; c.lineWidth = px(2.4); c.stroke(P.cls[2]); }
+  c.strokeStyle = C.gold; c.lineWidth = px(7.5); c.stroke(P.cls[1]); c.lineWidth = px(9); c.stroke(P.cls[0]);
+  c.strokeStyle = C.navy; c.lineWidth = px(4.5); c.stroke(P.cls[1]); c.lineWidth = px(6); c.stroke(P.cls[0]);
+  c.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (V.s > .04) {
+    c.font = "600 10px Rubik, system-ui, sans-serif"; c.textAlign = 'center'; c.textBaseline = 'middle';
+    const taken = [[sx(SCHOOL.x) - 60, sy(SCHOOL.y) - 44, 120, 40]];
+    for (const a of AREAS) {
+      const X = sx(a.x), Y = sy(a.y); if (X < -60 || X > W+60 || Y < -20 || Y > H+20) continue;
+      const w = c.measureText(a.name).width + 14, box = [X - w/2, Y - 9, w, 18];
+      if (taken.some(t => box[0] < t[0]+t[2] && box[0]+box[2] > t[0] && box[1] < t[1]+t[3] && box[1]+box[3] > t[1])) continue;
+      taken.push(box);
+      rrect(c, box[0], box[1], w, 18, 4); c.fillStyle = C.sign; c.fill(); c.lineWidth = 1.5; c.strokeStyle = '#fff';
+      rrect(c, box[0] + 2, box[1] + 2, w - 4, 14, 3); c.stroke(); c.fillStyle = '#fff'; c.fillText(a.name, X, Y + .5);
+    }
+  }
+  baseDirty = false;
+}
+function draw() { if (!raf) raf = requestAnimationFrame(frame); }
+function strokeLine(line, prog, now, style) {
+  const D = line.total * prog, path = new Path2D(); let head = line.pts[0], dir = 0;
+  path.moveTo(sx(line.pts[0][0]), sy(line.pts[0][1]));
+  for (let i = 1; i < line.pts.length; i++) {
+    if (line.cum[i] <= D) { path.lineTo(sx(line.pts[i][0]), sy(line.pts[i][1])); head = line.pts[i]; dir = line.pts[i][0] - line.pts[i-1][0]; continue; }
+    const seg = line.cum[i] - line.cum[i-1], t = seg ? (D - line.cum[i-1]) / seg : 0;
+    head = [line.pts[i-1][0] + (line.pts[i][0] - line.pts[i-1][0]) * t, line.pts[i-1][1] + (line.pts[i][1] - line.pts[i-1][1]) * t];
+    dir = line.pts[i][0] - line.pts[i-1][0]; path.lineTo(sx(head[0]), sy(head[1])); break;
+  }
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (style === 'car') {
+    ctx.strokeStyle = C.navy; ctx.lineWidth = 10; ctx.stroke(path);
+    ctx.strokeStyle = C.pink; ctx.lineWidth = 6; ctx.stroke(path);
+    ctx.setLineDash([6, 8]); ctx.lineDashOffset = REDUCED ? 0 : -(now / 45) % 14; ctx.strokeStyle = C.gold; ctx.lineWidth = 2.2; ctx.stroke(path); ctx.setLineDash([]);
+  } else if (style === 'solo') {
+    ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 7; ctx.stroke(path);
+    ctx.setLineDash([2, 9]); ctx.strokeStyle = C.navy; ctx.lineWidth = 4; ctx.stroke(path); ctx.setLineDash([]);
+  } else {
+    ctx.setLineDash([10, 8]); ctx.lineDashOffset = REDUCED ? 0 : -(now / 30) % 18; ctx.strokeStyle = 'rgba(230,0,126,.85)'; ctx.lineWidth = 4; ctx.stroke(path); ctx.setLineDash([]);
+  }
+  return {head, dir};
+}
+function carBadge(X, Y, full) {
+  ctx.beginPath(); ctx.arc(X, Y, 9, 0, 7); ctx.fillStyle = full ? '#C9CEDB' : C.gold; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = C.navy; ctx.stroke();
+  ctx.save(); ctx.translate(X - 6, Y - 6.5); ctx.scale(.5, .5); ctx.strokeStyle = C.navy; ctx.lineWidth = 2.6; ctx.lineJoin = 'round';
+  ctx.stroke(new Path2D('M3 16v-3.5c0-.8.4-1.5 1-1.9l2-1.1 1.8-3.4c.4-.7 1.1-1.1 1.9-1.1h4.6c.8 0 1.5.4 1.9 1.1l1.8 3.4 2 1.1c.6.4 1 1.1 1 1.9V16c0 .6-.4 1-1 1H4c-.6 0-1-.4-1-1Z')); ctx.restore();
+}
+function frame() {
+  raf = 0; if (W < 4 || H < 4) return;
+  const now = performance.now(); let busy = false;
+  if (baseDirty) drawBase();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(base, 0, 0);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const M = S.M, hide = S.revealingHide, riders = allRiders();
+  const order = route && route.style === 'car' ? route.ids : [];
+  // routes: the car (or my way to school), then a dashed preview for the person being looked at
+  if (route) {
+    let prog = 1;
+    if (A.routeDur) { prog = easeOut(clamp01((now - A.routeT0) / A.routeDur)); if (prog < 1) busy = true; else A.routeDur = 0; }
+    const {head, dir} = strokeLine(route, prog, now, route.style);
+    if (!REDUCED && route.style === 'car') busy = true;
+    if (A.mover && SPR.rk) {
+      if (prog >= 1 && now - A.routeT0 > A.routeDurOrig + 900) A.mover = false;
+      else { const X = sx(head[0]), Y = sy(head[1]); ctx.save(); ctx.translate(X, Y - 14); if (dir > 0) ctx.scale(-1, 1); ctx.drawImage(SPR.rk, -28, -20, 56, 40); ctx.restore(); busy = true; }
+    }
+  }
+  if (S.previewLine) { strokeLine(S.previewLine, 1, now, 'preview'); if (!REDUCED) busy = true; }
+  // classmates: people you can carpool with are flowers; everyone else stays a small dot
+  for (const r of riders) {
+    if (hide) break;
+    const X = sx(r.x), Y = sy(r.y); if (X < -40 || X > W+40 || Y < -40 || Y > H+40) continue;
+    const inCar = M && M.carSet.has(r.id), cand = !M || M.candSet.has(r.id) || inCar;
+    if (!cand) { ctx.beginPath(); ctx.arc(X, Y, 4, 0, 7); ctx.fillStyle = 'rgba(79,88,110,.35)'; ctx.fill(); continue; }
+    const k = popScale(r.id, now); if (k <= 0) { busy = true; continue; } if (k < 1) busy = true;
+    const pend = M && M.pendingWith.has(r.id), sel = S.preview === r.id;
+    const pulse = A.pulse.get(r.id);
+    if (pulse) { const t = (now - pulse) / 900; if (t < 1) { ctx.beginPath(); ctx.arc(X, Y, 18 + 26 * t, 0, 7); ctx.strokeStyle = `rgba(230,0,126,${1 - t})`; ctx.lineWidth = 3; ctx.stroke(); busy = true; } else A.pulse.delete(r.id); }
+    if (pend || sel) { ctx.save(); ctx.translate(X, Y); ctx.rotate(REDUCED ? 0 : now / 900); ctx.setLineDash([5, 5]); ctx.beginPath(); ctx.arc(0, 0, 22, 0, 7); ctx.strokeStyle = C.pink; ctx.lineWidth = 2.5; ctx.stroke(); ctx.restore(); if (!REDUCED) busy = true; }
+    const sz = (inCar ? 40 : 32) * k, im = SPR[inCar ? 'pink' : 'teal'];
+    if (im) ctx.drawImage(im, X - sz/2, Y - sz/2, sz, sz);
+    ctx.beginPath(); ctx.arc(X, Y, 8.5 * k, 0, 7); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = C.navy; ctx.stroke();
+    if (k > .6) { ctx.font = "400 8px Bungee, Impact, sans-serif"; ctx.fillStyle = C.navy; ctx.fillText(initials(r.name).slice(0, 1), X, Y + .5); }
+    if (k > .9 && r.role === 'drive') carBadge(X + 14, Y - 13, !inCar && seatsLeft(r) === 0);
+    const oi = order.indexOf(r.id);
+    if (k > .9 && oi > 0) { ctx.beginPath(); ctx.arc(X - 14, Y - 14, 8, 0, 7); ctx.fillStyle = C.navy; ctx.fill(); ctx.fillStyle = C.gold; ctx.font = "400 9px Bungee, Impact, sans-serif"; ctx.fillText(String(oi), X - 14, Y - 13.5); }
+  }
+  // school sign
+  { const X = sx(SCHOOL.x), Y = sy(SCHOOL.y); let k = 1;
+    if (A.school) { const t = clamp01((now - A.school) / 700); k = easeBack(t); if (t < 1) busy = true; }
+    ctx.save(); ctx.translate(X, Y); ctx.scale(k, k);
+    ctx.font = "400 11px Bungee, Impact, sans-serif"; const w = ctx.measureText('BEACONHOUSE').width + 22;
+    rrect(ctx, -w/2 - 2, -40, w + 4, 30, 9); ctx.fillStyle = C.gold; ctx.fill();
+    rrect(ctx, -w/2, -38, w, 26, 7); ctx.fillStyle = C.navy; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = C.green; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-7, -12); ctx.lineTo(7, -12); ctx.lineTo(0, -2); ctx.closePath(); ctx.fillStyle = C.navy; ctx.fill();
+    ctx.fillStyle = C.gold; ctx.fillText('BEACONHOUSE', 0, -24.5);
+    ctx.beginPath(); ctx.arc(0, 0, 4, 0, 7); ctx.fillStyle = C.pink; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = C.navy; ctx.stroke();
+    ctx.restore(); }
+  // me
+  if (S.me && !(S.tab === 'route' && S.editing)) {
+    const X = sx(S.me.x), Y = sy(S.me.y);
+    if (A.ripple) { const t = (now - A.ripple) / 1600; if (t < 1) { busy = true; for (let i = 0; i < 3; i++) { const u = t * 1.4 - i * .2; if (u <= 0 || u >= 1) continue; ctx.beginPath(); ctx.arc(X, Y, 14 + 110 * easeOut(u), 0, 7); ctx.strokeStyle = `rgba(230,0,126,${(1 - u) * .8})`; ctx.lineWidth = 3; ctx.stroke(); ctx.fillStyle = `rgba(230,0,126,${(1 - u) * .07})`; ctx.fill(); } } else A.ripple = 0; }
+    let k = 1, dy = 0; if (A.drop) { const t = clamp01((now - A.drop) / 600); k = easeBack(t); dy = (1 - easeOut(t)) * -30; if (t < 1) busy = true; else A.drop = 0; }
+    ctx.save(); ctx.translate(X, Y + dy); ctx.scale(k, k);
+    if (SPR.gold) ctx.drawImage(SPR.gold, -25, -25, 50, 50);
+    ctx.beginPath(); ctx.arc(0, 0, 9, 0, 7); ctx.fillStyle = C.pink; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = C.navy; ctx.stroke();
+    if (S.me.role === 'drive') carBadge(17, -16, false);
+    ctx.font = "400 10px Bungee, Impact, sans-serif"; const w = ctx.measureText('YOU').width + 14;
+    rrect(ctx, -w/2, 26, w, 18, 9); ctx.fillStyle = C.pink; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = C.navy; ctx.stroke(); ctx.fillStyle = '#fff'; ctx.fillText('YOU', 0, 35.5);
+    ctx.restore();
+  }
+  // privacy preview while placing
+  if (S.tab === 'route' && (!S.me || S.editing) && S.placed) {
+    const f = fuzz(V.cx, V.cy), R = FUZZ * .75 * V.s;
+    ctx.beginPath(); ctx.arc(sx(f.x), sy(f.y), Math.max(R, 10), 0, 7); ctx.fillStyle = 'rgba(255,199,44,.25)'; ctx.fill();
+    ctx.setLineDash([6, 5]); ctx.lineWidth = 2; ctx.strokeStyle = C.navy; ctx.stroke(); ctx.setLineDash([]);
+  }
+  if (busy && !document.hidden) draw();
+}
+
+function popScale(id, now) { const t0 = A.pops.get(id); if (t0 == null) return 1; const t = (now - t0) / 450; if (t <= 0) return 0; if (t >= 1) { A.pops.delete(id); return 1; } return easeBack(t); }
+let flyRaf = 0;
+function flyTo(cx, cy, s, ms = 700) {
+  cancelAnimationFrame(flyRaf);
+  return new Promise(res => {
+    if (REDUCED || !W) { V.cx = cx; V.cy = cy; V.s = s; baseDirty = true; draw(); onMapMove(); res(); return; }
+    const a = {...V}, t0 = performance.now();
+    const step = t => { const k = Math.min(1, (t - t0) / ms), e = k < .5 ? 4*k*k*k : 1 - Math.pow(-2*k + 2, 3) / 2;
+      V.cx = a.cx + (cx - a.cx) * e; V.cy = a.cy + (cy - a.cy) * e; V.s = Math.exp(Math.log(a.s) + (Math.log(s) - Math.log(a.s)) * e);
+      baseDirty = true; draw(); if (k < 1) flyRaf = requestAnimationFrame(step); else { onMapMove(); res(); } };
+    flyRaf = requestAnimationFrame(step);
+  });
+}
+const clampS = s => Math.max(0.012, Math.min(0.8, s));
+function fitTo(pts, ms = 900, pad = 56) {
+  if (!pts.length || !W) return Promise.resolve();
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  const top = 74, bottom = innerWidth < 900 ? 80 : 70, side = Math.min(pad, W * .12) + 10;
+  const s = Math.min((W - side*2) / Math.max(500, x1 - x0), (H - top - bottom) / Math.max(500, y1 - y0));
+  const sc = clampS(s);
+  return flyTo((x0 + x1) / 2, (y0 + y1) / 2 - (top - bottom) / 2 / sc, sc, ms);
+}
+function zoomAt(px, py, f) {
+  const x = wx(px), y = wy(py); V.s = clampS(V.s * f);
+  V.cx = x - (px - W/2) / V.s; V.cy = y - (py - H/2) / V.s; baseDirty = true; draw(); onMapMove();
+}
+const ptrs = new Map(); let downAt = null, pinch = null, moved = false;
+cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.offsetX, e.offsetY]); cancelAnimationFrame(flyRaf);
+  if (ptrs.size === 1) { downAt = [e.offsetX, e.offsetY]; moved = false; } else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = {d:Math.hypot(a[0]-b[0], a[1]-b[1]), s:V.s}; moved = true; } });
+cv.addEventListener('pointermove', e => { if (!ptrs.has(e.pointerId)) return; const prev = ptrs.get(e.pointerId); ptrs.set(e.pointerId, [e.offsetX, e.offsetY]);
+  if (ptrs.size === 2 && pinch) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a[0]-b[0], a[1]-b[1]); zoomAt((a[0]+b[0])/2, (a[1]+b[1])/2, clampS(pinch.s * d / pinch.d) / V.s); return; }
+  if (ptrs.size === 1) { const dx = e.offsetX - prev[0], dy = e.offsetY - prev[1];
+    if (downAt && !moved && Math.hypot(e.offsetX - downAt[0], e.offsetY - downAt[1]) > 6) { moved = true; cv.classList.add('drag'); $('#pin').classList.add('lift'); }
+    if (moved) { V.cx -= dx / V.s; V.cy -= dy / V.s; baseDirty = true; draw(); onMapMove(); } } });
+const up = e => { if (!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
+  if (ptrs.size === 0) { cv.classList.remove('drag'); const pin = $('#pin'); if (pin.classList.contains('lift')) { pin.classList.remove('lift'); markPlaced(); } if (!moved && downAt) onTap(e.offsetX, e.offsetY); downAt = null; } };
+cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+cv.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.offsetX, e.offsetY, Math.exp(-e.deltaY * 0.0018)); }, {passive:false});
+$('#zin').onclick = () => zoomAt(W/2, H/2, 1.6);
+$('#zout').onclick = () => zoomAt(W/2, H/2, 1/1.6);
+$('#zfit').onclick = () => fitCurrent();
+function placing() { return S.tab === 'route' && (!S.me || S.editing) && S.step === 1; }
+function onTap(px, py) {
+  if (placing()) { flyTo(wx(px), wy(py), Math.max(V.s, .16), 420).then(markPlaced); return; }
+  for (const r of allRiders()) if (Math.hypot(sx(r.x) - px, sy(r.y) - py) < 20 && (!S.M || S.M.candSet.has(r.id) || S.M.carSet.has(r.id))) { focusPerson(r.id); return; }
+}
+function onMapMove() { if (placing()) { const n = $('#here'); if (n) n.textContent = 'Pin is near ' + areaOf(V.cx, V.cy); } }
+function markPlaced() { if (!placing() || S.placed) return; S.placed = true; const c = $('#cta'); if (c) { c.hidden = false; c.style.animation = 'up .45s var(--spring) both'; const b = $('#next'); b.querySelector('span').textContent = 'This is my street'; } $('#pin-tip').textContent = 'Fine-tune: drag to your street'; onMapMove(); draw(); }
+function fitCurrent() {
+  if (S.me && !S.editing) { const pts = [[S.me.x, S.me.y], [SCHOOL.x, SCHOOL.y]]; if (route) pts.push(...route.pts); if (S.M) S.M.cands.slice(0, 5).forEach(n => pts.push([n.r.x, n.r.y])); return fitTo(pts); }
+  return fitTo([[SCHOOL.x - 4500, SCHOOL.y - 3000], [SCHOOL.x + 3500, SCHOOL.y + 5200]]);
+}
+new ResizeObserver(resize).observe(wrap);
+document.addEventListener('visibilitychange', draw);
+document.fonts && document.fonts.ready.then(() => { baseDirty = true; draw(); });
+
+/* ================= views ================= */
+const view = $('#view'), app = $('#app');
+function setView(html, key) {
+  const animate = key !== S.lastView; S.lastView = key;
+  view.onclick = null; view.innerHTML = html;
+  if (animate) { view.classList.remove('enter'); void view.offsetWidth; view.classList.add('enter'); [...view.children].forEach((c, i) => c.style.setProperty('--i', i)); view.scrollTop = 0; }
+  else view.classList.remove('enter');
+  countUps(animate);
+}
+function countUps(animate) {
+  view.querySelectorAll('[data-count]').forEach(el => {
+    const to = +el.dataset.count, dec = +(el.dataset.dec || 0), pre = el.dataset.pre || '', post = el.dataset.post || '', f = el.dataset.fmt;
+    const show = v => el.textContent = pre + (f === 'rs' ? rupees(v) : fmt(v, dec)) + post;
+    const from = animate ? 0 : (+el.dataset.from || to);
+    if (REDUCED || from === to) { show(to); return; }
+    const t0 = performance.now(), dur = 900; const step = t => { const k = Math.min(1, (t - t0) / dur); show(from + (to - from) * easeOut(k)); if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step);
+  });
+}
+function setTab(t) {
+  if (S.tab === t) { view.scrollTop = 0; return; }
+  S.tab = t; S.confirmRemove = false;
+  document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
+  app.classList.toggle('full', t !== 'route');
+  render();
+  if (t === 'route') setTimeout(() => { resize(); fitCurrent(); }, 560);
+}
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+
+function render(mover) {
+  $('#pin').hidden = !placing();
+  app.classList.toggle('setup', S.tab === 'route' && (!S.me || !!S.editing) && !S.revealing);
+  if (!S.revealing) S.M = model();
+  if (S.M && !S.revealing) { syncRoute(S.M, mover); syncShare(); }
+  if (S.preview && (!S.M || !S.M.candSet.has(S.preview))) { S.preview = null; S.previewLine = null; }
+  if (S.tab === 'route') {
+    if (S.revealing) renderFinding();
+    else if (!S.me || S.editing) S.step === 2 ? renderStep2() : renderStep1();
+    else if (S.profile) renderProfile();
+    else renderHome();
+  } else if (S.tab === 'chats') renderChats();
+  else renderBagh();
+  updateBadge(); draw();
+}
+
+/* ---------- step 1: your spot ---------- */
+function renderStep1() {
+  route = null; poolOrder = [];
+  setView(`
+  <div class="stack">
+    <p class="eyebrow">${S.editing ? 'MOVE YOUR SPOT' : 'STEP 1 OF 2 · YOUR SPOT'}</p>
+    <h1>Where does your school run start?</h1>
+    <p class="ur-sub" lang="ur">آپ کہاں سے آتے ہیں؟</p>
+  </div>
+  <button class="btn primary wide" id="locate"><svg viewBox="0 0 24 24" fill="none" stroke="#061D7B" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Use my location</button>
+  <div class="or">or search your area</div>
+  <div class="stack">
+    <div class="search"><input class="input" id="area-q" type="search" placeholder="e.g. Faisal Town" autocomplete="off" aria-label="Search your area"><div class="sug" id="area-sug" hidden></div></div>
+    <div class="chips">${POPULAR.map(n => `<button class="chip" data-area="${esc(n)}">${esc(n)}</button>`).join('')}</div>
+  </div>
+  <div class="privacy"><img src="${FL.gold}" alt=""><div><b>Classmates see a 300 m circle, never your house.</b><span class="ur" lang="ur">دیکھ مگر پیار سے</span></div></div>
+  <div class="sticky-cta" id="cta" ${S.placed ? '' : 'hidden'}>
+    <button class="btn green wide" id="next"><span>${S.placed ? 'This is my street' : 'Pick your area first'}</span><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+    <p class="fine" id="here" style="text-align:center">${S.placed ? 'Pin is near ' + esc(areaOf(V.cx, V.cy)) : 'Search, tap a chip, or drag the map'}</p>
+    ${S.editing ? '<button class="link" id="cancel-edit" style="align-self:center">Cancel</button>' : ''}
+  </div>`, 'step1');
+  const q = $('#area-q'), sug = $('#area-sug');
+  const pick = name => { const a = AREAS.find(z => z.name === name); if (!a) return; sug.hidden = true; q.value = a.name; q.blur();
+    view.querySelectorAll('[data-area]').forEach(b => b.setAttribute('aria-pressed', b.dataset.area === name));
+    flyTo(a.x, a.y, .2, 900).then(() => { markPlaced(); onMapMove(); }); };
+  q.oninput = () => { const t = q.value.trim().toLowerCase(); if (!t) { sug.hidden = true; return; }
+    const m = AREAS.filter(a => a.name.toLowerCase().includes(t)).slice(0, 6);
+    sug.innerHTML = m.length ? m.map(a => `<button data-area="${esc(a.name)}">${esc(a.name)}<small>${fmt(roadDist(mkPt(a.x, a.y), schoolPt)/1000, 1)} km to school</small></button>`).join('') : `<button disabled>No match. Drag the map to your street instead.</button>`;
+    sug.hidden = false; };
+  q.onkeydown = e => { if (e.key === 'Enter') { const b = sug.querySelector('button[data-area]'); if (b) pick(b.dataset.area); } if (e.key === 'Escape') sug.hidden = true; };
+  view.onclick = e => { const b = e.target.closest('[data-area]'); if (b) pick(b.dataset.area); };
+  $('#locate').onclick = locate;
+  $('#next').onclick = () => { S.step = 2; render(); };
+  const c = $('#cancel-edit'); if (c) c.onclick = () => { S.editing = false; S.step = 1; render(); fitCurrent(); };
+}
+function locate() {
+  const b = $('#locate'); b.disabled = true; b.lastChild.textContent = 'Finding you…';
+  const fail = () => { b.disabled = false; b.lastChild.textContent = 'Use my location'; toast("Location isn't available here. Search your area or drag the map."); $('#area-q').focus(); };
+  try {
+    if (!navigator.geolocation) return fail();
+    navigator.geolocation.getCurrentPosition(p => {
+      const pt = toXY(p.coords.latitude, p.coords.longitude);
+      if (Math.hypot(pt.x - SCHOOL.x, pt.y - SCHOOL.y) > 35000) { b.disabled = false; b.lastChild.textContent = 'Use my location'; toast("You seem to be outside Lahore. Search your area instead."); return; }
+      b.lastChild.textContent = 'Found you!'; flyTo(pt.x, pt.y, .22, 1000).then(() => { markPlaced(); onMapMove(); b.disabled = false; b.lastChild.textContent = 'Use my location'; });
+    }, fail, {enableHighAccuracy:true, timeout:8000, maximumAge:60000});
+  } catch { fail(); }
+}
+
+/* ---------- step 2: about you ---------- */
+function renderStep2() {
+  const d = S.draft;
+  setView(`
+  <div class="stack">
+    <p class="eyebrow">${S.editing ? 'YOUR DETAILS' : 'STEP 2 OF 2 · ABOUT YOU'}</p>
+    <h1>Nice spot! Now, about you</h1>
+    <p class="sub">Pin near <b>${esc(areaOf(V.cx, V.cy))}</b>. <button class="link" id="back">Move it</button></p>
+  </div>
+  <div class="row2">
+    <label class="field">Your first name<input class="input" id="f-name" maxlength="20" autocomplete="given-name" placeholder="e.g. Ayesha" value="${esc(d.name)}"></label>
+    <label class="field">Class<select class="input" id="f-cls">${CLASSES.map(c => `<option${c === d.cls ? ' selected' : ''}>${c}</option>`).join('')}</select></label>
+  </div>
+  <div class="field">How do you usually get to school?
+    <div class="role-cards" id="f-role" role="group" aria-label="How do you get to school">
+      <button class="role-card" data-role="drive" aria-pressed="${d.role === 'drive'}">${ICON.car}<b>My family drives</b><span>We have space for classmates</span></button>
+      <button class="role-card" data-role="ride" aria-pressed="${d.role === 'ride'}">${ICON.hand}<b>I need a ride</b><span>Find a car going my way</span></button>
+    </div>
+  </div>
+  <div class="field" id="seats-row" ${d.role === 'drive' ? '' : 'hidden'}>Seats for classmates
+    <div class="stepper"><button id="s-minus" aria-label="Fewer seats">−</button><output id="s-val">${d.seats}</output><button id="s-plus" aria-label="More seats">+</button><span class="fine">not counting you</span></div>
+  </div>
+  <div class="sticky-cta">
+    <button class="btn primary wide" id="save"><span>${S.editing ? 'Save' : 'Find classmates'}</span><svg viewBox="0 0 24 24" fill="none" stroke="#061D7B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+    <p class="fine" style="text-align:center">${S.db && S.uid ? 'Classmates near you will see your first name and rough area.' : 'Preview mode: your spot stays on this device.'}</p>
+  </div>`, 'step2');
+  $('#back').onclick = () => { S.step = 1; render(); };
+  const nm = $('#f-name'); nm.oninput = () => d.name = nm.value;
+  $('#f-cls').onchange = e => d.cls = e.target.value;
+  $('#f-role').onclick = e => { const b = e.target.closest('[data-role]'); if (!b) return; d.role = b.dataset.role; $('#f-role').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); $('#seats-row').hidden = d.role !== 'drive'; };
+  $('#s-minus').onclick = () => { d.seats = Math.max(1, d.seats - 1); $('#s-val').textContent = d.seats; };
+  $('#s-plus').onclick = () => { d.seats = Math.min(4, d.seats + 1); $('#s-val').textContent = d.seats; };
+  $('#save').onclick = saveMe;
+}
+async function saveMe() {
+  const d = S.draft, name = d.name.trim();
+  if (!name) { toast('Add your first name so classmates know who you are.'); $('#f-name').focus(); return; }
+  if (!d.role) { toast('Pick how you get to school: driving or need a ride.'); $('#f-role').scrollIntoView({block:'center', behavior:'smooth'}); return; }
+  if (Math.hypot(V.cx - SCHOOL.x, V.cy - SCHOOL.y) > 30000) { toast('That spot is outside Lahore. Move the pin closer to school.'); S.step = 1; render(); return; }
+  const wasEditing = S.editing;
+  const me = {name, cls:d.cls, role:d.role, seats:d.seats, x:V.cx, y:V.cy};
+  S.me = {...me, pt:mkPt(me.x, me.y)}; store.set('me', me); S.editing = false; S.step = 1; S.sharedSig = null;
+  if (wasEditing) { toast('Saved.'); S.profile = false; render(); fitCurrent(); return; }
+  reveal();
+}
+function sharedDoc() {
+  const f = fuzz(S.me.x, S.me.y), ll = toLL(f.x, f.y), M = S.M;
+  return {name:S.me.name, cls:S.me.cls, role:S.me.role, seats:S.me.role === 'drive' ? S.me.seats : 0, lat:ll.lat, lon:ll.lon, area:areaOf(f.x, f.y),
+    taken:M && M.drive ? M.carRiders.length : 0, inCar:M && !M.drive && M.driverId && !isMe(M.driverId) ? M.driverId : null, co2:+shareCO2().toFixed(2)};
+}
+async function syncShare() {
+  if (!(S.db && S.uid && S.canWrite && S.me && !S.editing)) return;
+  const doc = sharedDoc(), sig = JSON.stringify(doc);
+  if (sig === S.sharedSig) return; S.sharedSig = sig;
+  try { await S.db.doc('riders/' + S.uid).set({...doc, updatedAt:Date.now()}); } catch { S.canWrite = false; }
+}
+
+/* ---------- the reveal: pin drop → ripples → zoom out → classmates pop → route draws ---------- */
+async function reveal() {
+  S.revealing = true; S.revealingHide = true; render();
+  const pin = $('#pin'); pin.hidden = false; pin.classList.remove('lift'); pin.classList.add('drop'); $('#pin-tip').style.opacity = 0;
+  await sleep(420); pin.hidden = true; pin.classList.remove('drop'); $('#pin-tip').style.opacity = '';
+  A.drop = performance.now(); A.ripple = performance.now() + 150; draw();
+  await sleep(1000);
+  S.revealing = false; S.M = model(); S.revealing = true;
+  const M = S.M, t = performance.now();
+  M.cands.forEach((n, i) => A.pops.set(n.r.id, t + 700 + i * 110));
+  S.revealingHide = false;
+  const solo = routeLine({order:[{pt:S.me.pt}]});
+  await fitTo([[S.me.x, S.me.y], [SCHOOL.x, SCHOOL.y], ...M.cands.slice(0, 6).map(n => [n.r.x, n.r.y]), ...solo.pts], 1200);
+  await sleep(Math.min(M.cands.length, 10) * 110 + 250);
+  S.revealing = false; S.routeKey = null; render(true);
+  setTimeout(demoRequest, 7000);
+}
+function syncRoute(M, mover) {
+  const key = M.plan ? 'car:' + M.plan.order.map(m => m.id).join('|') : 'solo';
+  if (route && key === S.routeKey) return false;
+  S.routeKey = key;
+  const line = M.plan ? routeLine(M.plan) : routeLine({order:[{pt:S.me.pt}]});
+  route = {...line, style:M.plan ? 'car' : 'solo', ids:M.plan ? M.plan.order.map(m => m.id) : []};
+  A.routeT0 = performance.now(); A.routeDur = REDUCED ? 0 : Math.min(2200, 900 + route.total / 8); A.routeDurOrig = A.routeDur; A.mover = !!mover && !REDUCED && !!M.plan; draw();
+  return true;
+}
+function setPreview(id) {
+  S.preview = S.preview === id ? null : id; S.previewLine = null;
+  const M = S.M;
+  if (S.preview && M) {
+    const r = riderById(id);
+    const plan = M.drive ? planCar(meRider(), [...M.carRiders.map(riderById), r]) : planCar(r, [meRider()]);
+    S.previewLine = routeLine(plan); A.pulse.set(id, performance.now());
+    fitTo([...S.previewLine.pts, [S.me.x, S.me.y], [SCHOOL.x, SCHOOL.y]], 700);
+  }
+  view.querySelectorAll('.person').forEach(el => el.classList.toggle('sel', el.dataset.person === S.preview));
+  draw();
+}
+function renderFinding() {
+  setView(`<div class="finding"><img src="${FL.teal}" alt=""><h1 class="dots">Finding classmates near you</h1><p class="sub">Looking within ${S.radius/1000} km of your spot and mapping your way to Beaconhouse.</p></div>`, 'finding');
+}
+
+/* ---------- home: one question, one car, one list ---------- */
+const fav = (id, name, img, size = 48) => `<div class="fav" style="width:${size}px;height:${size}px"><img src="${img}" alt="" style="width:${size}px;height:${size}px"><b style="left:${size/2-10}px;top:${size/2-10}px">${esc(initials(name).slice(0,1))}</b></div>`;
+function renderHome() {
+  const M = S.M, drive = M.drive, name = esc(S.me.name);
+  setView(`
+  <div class="hello">
+    <div class="stack" style="gap:2px"><p class="eyebrow">SALAM,</p><h1>${name}!</h1></div>
+    <button class="me-btn" id="profile" aria-label="Your profile and settings">${fav('me', S.me.name, FL.gold, 46)}</button>
+  </div>
+  <div class="today"><span id="today-l">TODAY I'M</span>
+    <div class="seg big" id="role" role="group" aria-labelledby="today-l">
+      <button data-role="drive" aria-pressed="${drive}">${ICON.car}Driving</button>
+      <button data-role="ride" aria-pressed="${!drive}">${ICON.hand}Riding</button>
+    </div>
+  </div>
+  ${M.incoming.map(incomingCard).join('')}
+  ${carCard(M)}
+  ${M.plan ? stampsCard(M) : ''}
+  ${listHTML(M)}`, 'home');
+  bindHome();
+}
+function incomingCard(q) {
+  const r = riderById(q.from); if (!r) return '';
+  const M = S.M, full = M.drive && S.me.seats - M.carRiders.length <= 0;
+  const what = q.kind === 'ask' ? 'wants a ride in your car' : 'can drive you to school';
+  return `<div class="card req">
+    <div class="row">${fav(r.id, r.name, FL.pink)}<div style="min-width:0"><b class="nm">${esc(r.name)}</b> <span class="tag">${esc(r.cls)}</span><p class="sub">${what}</p><p class="where">near ${esc(r.area)}</p></div></div>
+    <div class="btn-row"><button class="btn green" data-accept="${esc(q.id)}" ${full ? 'disabled' : ''}>${ICON.check}${full ? 'Car full' : 'Yes!'}</button><button class="btn" data-decline="${esc(q.id)}">No thanks</button></div>
+  </div>`;
+}
+function seatHTML(kind, r, sub, order) {
+  if (kind === 'empty') return `<div class="seat free"><span class="ring">${ICON.plus}</span>Free<small>seat</small></div>`;
+  if (kind === 'wait') return `<div class="seat wait"><span class="ring">${fav(r.id, r.name, FL.teal, 44)}</span>${esc(r.name)}<small>waiting…</small></div>`;
+  return `<div class="seat filled${isMe(r.id) ? ' me' : ''}"><span class="ring">${fav(r.id, r.name, isMe(r.id) ? FL.gold : FL.pink, 52)}${order ? `<i class="ord">${order}</i>` : ''}</span>${isMe(r.id) ? 'You' : esc(r.name)}<small>${esc(sub)}</small>${kind === 'remove' ? `<button class="x" data-remove="${esc(r.id)}" aria-label="Remove ${esc(r.name)} from your car">${ICON.x}</button>` : ''}</div>`;
+}
+function carCard(M) {
+  const P = M.plan, timeOf = id => { if (!P) return ''; const i = P.order.findIndex(m => m.id === id || (isMe(m.id) && isMe(id))); return i >= 0 ? P.times[i] : ''; };
+  if (M.drive) {
+    const seats = [];
+    seats.push(seatHTML('filled', meRider(), P ? 'leave ' + P.leave : 'driver', 0));
+    M.carRiders.forEach(id => seats.push(seatHTML('remove', riderById(id), 'pick-up ' + timeOf(id), P ? P.order.findIndex(m => m.id === id) : 0)));
+    [...M.pendingWith.keys()].forEach(id => { const r = riderById(id); if (r) seats.push(seatHTML('wait', r)); });
+    for (let i = M.carRiders.length + M.pendingWith.size; i < S.me.seats; i++) seats.push(seatHTML('empty'));
+    const free = S.me.seats - M.carRiders.length;
+    return `<div class="card car" id="car">
+      <div class="car-head"><h2>Your car</h2><span class="pill${free ? '' : ' full'}">${free ? `${free} seat${free === 1 ? '' : 's'} free` : 'Car full'}</span></div>
+      <div class="seats">${seats.join('')}</div>
+      ${P ? `<div class="plan"><span><b>Leave at ${P.leave}</b>, pick up ${P.order.slice(1).map(m => esc(m.name)).join(', ')}, reach school by ${clock(ARRIVE)}.</span><span class="fine">${fmt(P.len/1000, 1)} km · about ${P.mins} min</span></div>
+        <div class="btn-row"><button class="btn" data-chat="${esc(M.carRiders[0])}">${ICON.chat}Message ${esc(riderById(M.carRiders[0]).name)}</button></div>`
+      : `<div class="steps3"><span>1 · Invite</span><span>2 · They say yes</span><span>3 · Ride together</span></div><p class="sub">Invite kids who need a ride from the list below.</p>`}
+    </div>`;
+  }
+  if (M.driver) {
+    const d = M.driver, seats = [seatHTML('filled', d, 'driver · ' + (P ? P.leave : ''), 0)];
+    M.carRiders.forEach(id => seats.push(seatHTML('filled', riderById(id), 'pick-up ' + timeOf(id), P ? P.order.findIndex(m => m.id === id || (isMe(m.id) && isMe(id))) : 0)));
+    const left = seatsLeft(d); for (let i = 0; i < Math.min(left, 3); i++) seats.push(seatHTML('empty'));
+    return `<div class="card car" id="car">
+      <div class="car-head"><h2>You're riding with ${esc(d.name)}</h2><span class="pill">${ICON.check}Set!</span></div>
+      <div class="seats">${seats.join('')}</div>
+      ${P ? `<div class="plan"><span><b>${esc(d.name)} picks you up at ${timeOf('me')}</b> and you reach school by ${clock(ARRIVE)}.</span><span class="fine">${fmt(P.len/1000, 1)} km · about ${P.mins} min</span></div>` : ''}
+      <div class="btn-row"><button class="btn green" data-chat="${esc(d.id)}">${ICON.chat}Message ${esc(d.name)}</button></div>
+      ${S.confirm === 'leave' ? `<span class="confirm">Leave ${esc(d.name)}'s car? <button class="yes" id="leave-yes">Leave</button><button id="leave-no">Stay</button></span>` : `<button class="link danger" id="leave" style="align-self:flex-start">Leave this carpool</button>`}
+    </div>`;
+  }
+  const wait = [...M.pendingWith.values()][0];
+  if (wait) { const r = riderById(wait.to);
+    return `<div class="card car waiting" id="car"><div class="row">${fav(r.id, r.name, FL.teal)}<div><h2 class="dots">Asking ${esc(r.name)}</h2><p class="sub">We'll tell you as soon as ${esc(r.name)} says yes.</p></div></div><button class="link" data-cancel="${esc(wait.id)}" style="align-self:flex-start">Cancel request</button></div>`; }
+  return `<div class="card car empty-car" id="car"><img src="${RK}" alt=""><div class="stack" style="gap:6px"><h2>No car yet</h2><div class="steps3"><span>1 · Ask</span><span>2 · Driver says yes</span><span>3 · Ride</span></div><p class="sub">Pick a car going your way below.</p></div></div>`;
+}
+function weekDays() {
+  const d = new Date(), wd = d.getDay(), mon = new Date(d); mon.setDate(d.getDate() - ((wd + 6) % 7));
+  return ['M','T','W','T','F'].map((l, i) => { const x = new Date(mon); x.setDate(mon.getDate() + i); const k = x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0'); return {l, k, today:k === today(), past:k < today()}; });
+}
+function plantSVG(p) {
+  const st = p < .25 ? 0 : p < .5 ? 1 : p < .75 ? 2 : 3;
+  const pot = '<path d="M14 44h28l-3 14H17z" fill="#C8693B" stroke="#061D7B" stroke-width="2.4" stroke-linejoin="round"/><path d="M12 40h32v5H12z" fill="#E08A55" stroke="#061D7B" stroke-width="2.4"/><ellipse cx="28" cy="40" rx="14" ry="2.5" fill="#6B3E22"/>';
+  const L = (x, y, a, s, f) => `<path transform="translate(${x} ${y}) rotate(${a}) scale(${s})" d="M0 0C3-5 9-5 13 0C9 5 3 5 0 0Z" fill="${f}" stroke="#061D7B" stroke-width="1.6"/>`;
+  const parts = [
+    '<ellipse cx="28" cy="39" rx="5" ry="3" fill="#8B5A2B" stroke="#061D7B" stroke-width="1.6"/><path d="M28 38v-5" stroke="#0F6B3A" stroke-width="2.2" stroke-linecap="round"/>' + L(28, 34, -40, .75, '#9BD14B'),
+    '<path d="M28 39V30" stroke="#0F6B3A" stroke-width="2.4" stroke-linecap="round"/>' + L(28, 31, -150, 1, '#9BD14B') + L(28, 31, -30, 1, '#2E9E4F'),
+    '<path d="M28 39V20" stroke="#0F6B3A" stroke-width="2.6" stroke-linecap="round"/>' + L(28, 33, -150, 1.1, '#9BD14B') + L(28, 28, -30, 1.2, '#2E9E4F') + L(28, 22, -120, 1.1, '#2E9E4F') + L(28, 21, -60, 1, '#9BD14B'),
+    '<path d="M28 39V24" stroke="#7A4A1E" stroke-width="3.4" stroke-linecap="round"/><circle cx="21" cy="20" r="8" fill="#2E9E4F" stroke="#061D7B" stroke-width="2"/><circle cx="35" cy="20" r="8" fill="#2E9E4F" stroke="#061D7B" stroke-width="2"/><circle cx="28" cy="12" r="9" fill="#3DB35E" stroke="#061D7B" stroke-width="2"/><circle cx="25" cy="10" r="2.5" fill="#9BD14B"/>'
+  ];
+  return `<svg viewBox="0 0 56 60" aria-hidden="true">${pot}<g class="plant-grow">${parts[st]}</g></svg>`;
+}
+function stampsCard(M) {
+  const days = weekDays(), have = new Set(S.stats.rides.map(r => r.d)), wkend = [0, 6].includes(new Date().getDay());
+  const co2 = poolCO2(), rem = co2 % TREE_KG, per = M.plan.co2Day, need = per > 0 ? Math.ceil((TREE_KG - rem) / per) : 0, done = have.has(today());
+  return `<div class="card stamps" id="stamps">
+    <div class="car-head"><h2>Ride stamps</h2><span class="ur" lang="ur" style="color:#0F6B3A;font-size:.95rem">ہفتے کی مہریں</span></div>
+    <div class="week">${days.map(d => { const st = have.has(d.k) ? 'done' : d.today ? 'today' : d.past ? 'missed' : 'future';
+      return `<div class="dcol"><button class="day ${st}" ${st === 'today' ? 'id="stamp-today"' : 'disabled'} aria-label="${d.today ? (st === 'done' ? 'Today is stamped' : 'Stamp today') : d.k}">${st === 'done' ? `<img src="${FL.pink}" alt="">` : st === 'today' ? 'TAP' : ''}</button><span>${d.today ? 'Today' : d.l}</span></div>`; }).join('')}</div>
+    <p class="fine" style="text-align:center">${wkend ? 'No school today. See you Monday!' : done ? "Stamped! Your seed is growing." : "Rode together today? Tap today's circle."}</p>
+    <div class="grow">${plantSVG(rem / TREE_KG)}<div><b>${need} more ride${need === 1 ? '' : 's'}</b> until tree #${myTrees() + 1}<p class="fine">Every tree here is one Beaconhouse plants for real.</p></div></div>
+  </div>`;
+}
+function listHTML(M) {
+  if (!M.drive && M.driver) return '';
+  const all = M.cands, show = S.showAll ? all : all.slice(0, 4), ex = all.some(n => n.r.example);
+  const title = M.drive ? 'Kids who need a ride' : 'Cars going your way';
+  const sub = M.drive ? (M.myLeft > 0 ? 'Closest first. Tap Invite and they get a request.' : 'Your car is full. Remove someone to invite more.') : 'Closest first. Ask to join and the driver says yes.';
+  return `<div class="stack" id="list">
+    <div class="list-head"><h2>${title}</h2>${ex ? '<span class="tag ex">Examples</span>' : ''}</div>
+    <p class="sub" style="margin-top:-4px">${sub}</p>
+    ${show.length ? `<div class="people">${show.map(personCard).join('')}</div>` : `<div class="empty"><img src="${FL.teal}" alt=""><b>No one within ${S.radius/1000} km yet</b><span>Share Beacon Pool in your class group so more classmates join.</span></div>`}
+    ${all.length > show.length ? `<button class="btn wide" id="more">Show ${all.length - show.length} more</button>` : ''}
+    ${S.radius < 6000 ? `<button class="link" id="farther" style="align-self:center">Look farther away (${S.radius/1000 + 2} km)</button>` : ''}
+  </div>`;
+}
+function personCard(n) {
+  const r = n.r, M = S.M, mins = Math.max(1, Math.round(n.road / 1000 / CITY_KMH * 60));
+  let meta, act;
+  if (r.role === 'drive') {
+    const left = n.left, tot = Math.max(r.seats || 0, left);
+    meta = `<span class="meta">${ICON.car}${left ? `<span class="sdots">${Array.from({length:tot}, (_, i) => `<i class="${i < tot - left ? 't' : ''}"></i>`).join('')}</span>${left} seat${left === 1 ? '' : 's'} free` : 'Car full'}</span>`;
+  } else meta = `<span class="meta needs">${ICON.hand}Needs a ride</span>`;
+  if (n.inq) act = `<button class="btn green sm" data-accept="${esc(n.inq.id)}">${ICON.check}Yes!</button><span class="fine">asked you</span>`;
+  else if (n.req) act = `<span class="wait-chip">Waiting<span class="dots"></span></span><button class="link" data-cancel="${esc(n.req.id)}">Cancel</button>`;
+  else if (r.role === 'drive' && n.left === 0) act = `<span class="full-chip">Full</span>`;
+  else if (M.drive) act = `<button class="btn primary sm" data-invite="${esc(r.id)}" ${M.myLeft <= 0 ? 'disabled' : ''}>Invite</button>`;
+  else act = `<button class="btn primary sm" data-invite="${esc(r.id)}" ${M.pendingWith.size ? 'disabled' : ''}>Ask</button>`;
+  return `<article class="person${r.role === 'drive' && n.left === 0 && !n.req ? ' off' : ''}${S.preview === r.id ? ' sel' : ''}" data-person="${esc(r.id)}" id="p-${esc(r.id)}" tabindex="0">
+    ${fav(r.id, r.name, FL.teal)}
+    <div class="who"><div class="who-top"><b>${esc(r.name)}</b><span class="tag">${esc(r.cls)}</span></div>${meta}<span class="where">near ${esc(r.area)} · ${mins} min away</span></div>
+    <div class="act">${act}</div>
+  </article>`;
+}
+function bindHome() {
+  $('#profile').onclick = () => { S.profile = true; render(); };
+  $('#role').onclick = e => { const b = e.target.closest('[data-role]'); if (!b || b.dataset.role === S.me.role) return;
+    const M = S.M; if (M.carRiders.length || (!M.drive && M.driver)) { toast('Leave your carpool first, then switch.'); return; }
+    [...M.pendingWith.values()].forEach(q => setReq(q, 'cancelled', true));
+    S.me.role = b.dataset.role; store.set('me', {...S.me, pt:undefined}); S.preview = null; S.previewLine = null;
+    toast(S.me.role === 'drive' ? "You're driving today. Here are kids who need a ride." : "You're riding today. Here are cars going your way.");
+    const t = performance.now(); render(); (S.M.cands || []).forEach((n, i) => A.pops.set(n.r.id, t + i * 70)); draw(); fitCurrent(); };
+  view.onclick = e => {
+    const t = e.target;
+    const inv = t.closest('[data-invite]'); if (inv) { sendReq(inv.dataset.invite); return; }
+    const acc = t.closest('[data-accept]'); if (acc) { const q = S.reqs.get(acc.dataset.accept); if (q) acceptReq(q); return; }
+    const dec = t.closest('[data-decline]'); if (dec) { const q = S.reqs.get(dec.dataset.decline); if (q) { setReq(q, 'declined'); toast('No problem.'); } return; }
+    const can = t.closest('[data-cancel]'); if (can) { const q = S.reqs.get(can.dataset.cancel); if (q) { setReq(q, 'cancelled'); toast('Request cancelled.'); } return; }
+    const rm = t.closest('[data-remove]'); if (rm) { removeRider(rm.dataset.remove); return; }
+    const ch = t.closest('[data-chat]'); if (ch) { S.chatWith = ch.dataset.chat; setTab('chats'); return; }
+    if (t.closest('#stamp-today')) { stampToday(t.closest('#stamp-today')); return; }
+    if (t.closest('#more')) { S.showAll = true; render(); return; }
+    if (t.closest('#farther')) { S.radius += 2000; S.showAll = false; const tt = performance.now(); render(); S.M.cands.forEach((n, i) => { if (!A.pops.has(n.r.id)) A.pops.set(n.r.id, tt + i * 60); }); fitCurrent(); return; }
+    if (t.closest('#leave')) { S.confirm = 'leave'; render(); return; }
+    if (t.closest('#leave-no')) { S.confirm = null; render(); return; }
+    if (t.closest('#leave-yes')) { S.confirm = null; const q = [...S.reqs.values()].find(x => x.status === 'accepted' && isMe(rdrOf(x))); if (q) { setReq(q, 'left'); toast("You've left the carpool."); } return; }
+    const p = t.closest('[data-person]'); if (p) setPreview(p.dataset.person);
+  };
+}
+
+/* ---------- requests: invite / ask → they say yes ---------- */
+function sendReq(id) {
+  const r = riderById(id), M = S.M; if (!r) return;
+  const already = M.incoming.find(q => q.from === id); if (already) { acceptReq(already); return; }
+  const q = {id:(r.example ? 'x' : 'q') + Date.now().toString(36), from:S.uid && !r.example ? S.uid : 'me', to:id, kind:M.drive ? 'invite' : 'ask', status:'pending', ts:Date.now(), ex:!!r.example};
+  if (!r.example && !(S.db && S.uid)) { toast('Open Beacon Pool while signed in to send real requests.'); return; }
+  S.reqs.set(q.id, q); if (q.ex) saveExReqs(); else S.db.doc('requests/' + q.id).set({from:q.from, to:q.to, kind:q.kind, status:'pending', ts:q.ts}).catch(() => toast("Request didn't send. Try again."));
+  S.preview = null; S.previewLine = null; A.pulse.set(id, performance.now());
+  toast(M.drive ? `Invite sent to ${r.name}.` : `Asked ${r.name}. Waiting for a yes…`);
+  render();
+  if (q.ex) setTimeout(() => {
+    const cur = S.reqs.get(q.id); if (!cur || cur.status !== 'pending') return;
+    if (!M.drive && seatsLeft(r) === 0) { setReq(cur, 'declined'); toast(`${r.name}'s car just filled up. Try another car.`); return; }
+    cur.status = 'accepted'; cur.ts = Date.now();
+    [...S.reqs.values()].filter(x => x !== cur && x.status === 'pending' && x.from === id && isMe(x.to)).forEach(x => { x.status = 'cancelled'; });
+    saveExReqs();
+    (S.exMsgs[id] = S.exMsgs[id] || []).push({from:id, ts:Date.now(), text:M.drive ? 'Yes please! Thank you for the ride.' : 'Yes! Come along. See you in the morning.'}); store.set('exmsgs', S.exMsgs);
+    joined(r);
+  }, 1900);
+}
+function joined(r) {
+  toast(`${r.name} said yes! You're carpooling now.`);
+  if (S.tab === 'route' && !S.profile) { render(true); leafBurst($('#car')); } else { render(); }
+}
+function acceptReq(q) {
+  const M = S.M, r = riderById(q.from);
+  if (M.drive && S.me.seats - M.carRiders.length <= 0) { toast('Your car is full.'); return; }
+  if (!M.drive) [...S.reqs.values()].filter(x => x !== q && x.status === 'pending' && isMe(x.from)).forEach(x => setReq(x, 'cancelled', true));
+  [...S.reqs.values()].filter(x => x !== q && x.status === 'pending' && isMe(x.from) && x.to === q.from).forEach(x => setReq(x, 'cancelled', true));
+  setReq(q, 'accepted', true); joined(r);
+}
+function setReq(q, status, quiet) {
+  q.status = status; q.ts = Date.now();
+  if (q.ex) saveExReqs(); else if (S.db) S.db.doc('requests/' + q.id).update({status, ts:q.ts}).catch(() => toast("That didn't save. Try again."));
+  if (!quiet) render();
+}
+function removeRider(id) {
+  const q = [...S.reqs.values()].find(x => x.status === 'accepted' && isMe(drvOf(x)) && rdrOf(x) === id);
+  if (q) { setReq(q, 'left'); toast(`${riderById(id).name} is out of your car.`); }
+}
+function demoRequest() {
+  if (store.get('demoReq', false) || !S.me || !examplesOn()) return;
+  const M = S.M; if (!M || M.incoming.length) return;
+  const used = new Set([...S.reqs.values()].flatMap(q => [q.from, q.to]));
+  const pick = allRiders().filter(r => r.example && !used.has(r.id) && r.role !== S.me.role && (r.role === 'ride' || seatsLeft(r) > 0))
+    .sort((a, b) => Math.hypot(a.x - S.me.x, a.y - S.me.y) - Math.hypot(b.x - S.me.x, b.y - S.me.y))[0];
+  if (!pick || (M.drive && M.myLeft <= 0) || (!M.drive && M.driver)) return;
+  store.set('demoReq', true);
+  const q = {id:'x' + Date.now().toString(36), from:pick.id, to:'me', kind:M.drive ? 'ask' : 'invite', status:'pending', ts:Date.now(), ex:true};
+  S.reqs.set(q.id, q); saveExReqs();
+  toast(M.drive ? `${pick.name} wants a ride in your car!` : `${pick.name} can drive you to school!`);
+  if (S.tab === 'route' && !S.profile) { render(); view.scrollTo({top:0, behavior:'smooth'}); } else updateBadge();
+}
+
+/* ---------- profile ---------- */
+function renderProfile() {
+  const d = S.me;
+  setView(`
+  <div class="chat-head"><button class="icon-btn" id="pback" aria-label="Back">${ICON.back}</button><h1>Your profile</h1></div>
+  <div class="card row">${fav('me', d.name, FL.gold, 56)}<div><b class="nm" style="font-size:1.15rem">${esc(d.name)}</b><p class="sub">${esc(d.cls)} · near ${esc(areaOf(d.x, d.y))}</p></div></div>
+  <div class="card stack">
+    <h2>Seats for classmates</h2>
+    <p class="sub">${d.role === 'drive' ? 'How many classmates fit in your car (not counting you).' : 'Only used on days you drive.'}</p>
+    <div class="stepper"><button id="ps-minus" aria-label="Fewer seats">−</button><output id="ps-val">${d.seats}</output><button id="ps-plus" aria-label="More seats">+</button></div>
+  </div>
+  <div class="card stack">
+    <h2>Your spot</h2><p class="sub">Classmates only see a 300 m circle near ${esc(areaOf(d.x, d.y))}.</p>
+    <button class="btn wide" id="move">Move my spot or change name</button>
+  </div>
+  ${S.confirm === 'remove' ? `<span class="confirm">Remove your spot and leave all carpools? <button class="yes" id="rm-yes">Remove</button><button id="rm-no">Keep it</button></span>` : `<button class="link danger" id="rm" style="align-self:flex-start">Take me off the map</button>`}`, 'profile');
+  $('#pback').onclick = () => { S.profile = false; S.confirm = null; render(); };
+  const setSeats = v => { const M = S.M; const min = Math.max(1, M && M.drive ? M.carRiders.length : 1); S.me.seats = Math.max(min, Math.min(4, v)); store.set('me', {...S.me, pt:undefined}); $('#ps-val').textContent = S.me.seats; if (v < min) toast('Remove someone from your car first.'); S.M = model(); syncShare(); };
+  $('#ps-minus').onclick = () => setSeats(S.me.seats - 1);
+  $('#ps-plus').onclick = () => setSeats(S.me.seats + 1);
+  $('#move').onclick = () => { S.draft = {name:d.name, cls:d.cls, role:d.role, seats:d.seats}; S.editing = true; S.profile = false; S.step = 1; S.placed = true; route = null; S.previewLine = null; render(); flyTo(d.x, d.y, Math.max(V.s, .2), 700); };
+  const rm = $('#rm'); if (rm) rm.onclick = () => { S.confirm = 'remove'; render(); };
+  const rn = $('#rm-no'); if (rn) rn.onclick = () => { S.confirm = null; render(); };
+  const ry = $('#rm-yes'); if (ry) ry.onclick = removeMe;
+}
+function focusPerson(id) {
+  A.pulse.set(id, performance.now()); draw();
+  if (S.tab !== 'route' || !S.M || S.profile) return;
+  const el = document.getElementById('p-' + id);
+  if (!el) { if (S.M.carSet.has(id)) $('#car') && $('#car').scrollIntoView({behavior:REDUCED ? 'auto' : 'smooth', block:'center'}); return; }
+  el.scrollIntoView({behavior:REDUCED ? 'auto' : 'smooth', block:'center'}); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+  if (S.preview !== id) setPreview(id);
+}
+async function removeMe() {
+  [...S.reqs.values()].filter(q => liveReq(q) && (isMe(q.from) || isMe(q.to))).forEach(q => setReq(q, q.status === 'accepted' ? 'left' : 'cancelled', true));
+  if (S.db && S.uid) { try { await S.db.doc('riders/' + S.uid).delete(); } catch {} }
+  S.me = null; store.set('me', null); S.confirm = null; S.profile = false; S.placed = false; S.step = 1; route = null; S.previewLine = null; S.preview = null; S.draft.role = '';
+  toast("You're off the map. Your spot is deleted."); render(); fitCurrent();
+}
+
+/* ---------- ride stamps → trees ---------- */
+function stampToday(btn) {
+  const M = S.M; if (!M || !M.plan || loggedToday()) return;
+  const before = myTrees(), p = M.plan;
+  S.stats.rides.push({d:today(), co2:p.co2Day, km:p.savedKmDay, n:p.order.length});
+  store.set('stats', S.stats); saveStats(); syncShare();
+  btn.classList.remove('today'); btn.classList.add('done'); btn.innerHTML = `<img src="${FL.pink}" alt="">`; leafBurst(btn);
+  const after = myTrees();
+  if (after > before) { S.pendingFresh = after - 1; setTimeout(() => celebrate(after), 650); }
+  else toast(`Stamped! ${fmt(p.co2Day, 1)} kg of CO₂ kept out of Lahore's air.`);
+  setTimeout(() => { if (S.tab === 'route' && !S.profile) render(); }, 700);
+}
+function logPast(n) {
+  const M = S.M; if (!M || !M.plan) { toast('Join a carpool first.'); return; }
+  const before = myTrees(), p = M.plan, have = new Set(S.stats.rides.map(r => r.d));
+  let d = new Date(), added = 0, guard = 0;
+  while (added < n && guard++ < 90) { d.setDate(d.getDate() - 1); const wd = d.getDay(); if (wd === 0 || wd === 6) continue;
+    const k = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); if (have.has(k)) continue;
+    S.stats.rides.push({d:k, co2:p.co2Day, km:p.savedKmDay, n:p.order.length, demo:true}); added++; }
+  store.set('stats', S.stats); saveStats(); syncShare(); leafBurst($('#demo'));
+  const after = myTrees();
+  if (after > before) { S.pendingFresh = after - 1; setTimeout(() => celebrate(after), 450); } else toast(`Added ${added} rides.`);
+  render();
+}
+async function saveStats() {
+  if (!(S.db && S.uid)) return;
+  try { await S.db.doc('data/users/' + S.uid + '/stats').set({rides:S.stats.rides.slice(-400)}); } catch {}
+}
+
+function leafBurst(el) {
+  if (!el || REDUCED) return; const r = el.getBoundingClientRect(), o = ROOT.getBoundingClientRect();
+  for (let i = 0; i < 10; i++) {
+    const p = document.createElement('img'); p.src = [FL.pink, FL.gold, FL.teal][i % 3]; p.className = 'petal'; p.alt = '';
+    const a = Math.random() * Math.PI * 2, d = 60 + Math.random() * 60;
+    p.style.cssText = `left:${r.left - o.left + r.width/2 - 12}px;top:${r.top - o.top + r.height/2 - 12}px;width:22px;height:22px;transition:transform .8s cubic-bezier(.2,.8,.2,1),opacity .8s;animation:none`;
+    ROOT.appendChild(p);
+    requestAnimationFrame(() => { p.style.transform = `translate(${Math.cos(a)*d}px,${Math.sin(a)*d - 30}px) rotate(${Math.random()*360}deg) scale(.6)`; p.style.opacity = 0; });
+    setTimeout(() => p.remove(), 900);
+  }
+}
+function celebrate(count) {
+  const sp = spAt(count - 1);
+  const el = document.createElement('div'); el.className = 'celebrate'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'You earned a tree');
+  el.innerHTML = `<div class="box"><svg viewBox="0 0 120 120" aria-hidden="true"><ellipse cx="60" cy="104" rx="34" ry="7" fill="#A47A4F" opacity=".45"/><g class="tree-grow" style="transform-origin:60px 104px"><g transform="translate(60 104) scale(2.6) translate(-60 -104)">${treeSVG(sp, 60, 104)}</g></g>${burstSVG(60, 64, 10)}</svg>
+    <h2>Tree #${count} earned!</h2><p class="ur" lang="ur" style="color:#0F6B3A;font-size:1.05rem">مبارک ہو!</p>
+    <p>Your carpool rides have saved another ${TREE_KG} kg of CO₂. <b>Beaconhouse will plant this ${sp === 'sarv' ? 'cypress' : sp} as a real tree</b> in its next planting drive.</p>
+    <button class="btn green wide" id="see-bagh">See my bagh</button><button class="link" id="close-cel">Keep going</button></div>`;
+  ROOT.appendChild(el);
+  for (let i = 0; i < 26 && !REDUCED; i++) {
+    const p = document.createElement('img'); p.src = [FL.pink, FL.gold, FL.teal][i % 3]; p.className = 'petal'; p.alt = '';
+    p.style.left = Math.random() * 100 + '%'; p.style.setProperty('--fall', (ROOT.clientHeight + 80) + 'px'); p.style.setProperty('--dx', (Math.random() * 120 - 60) + 'px'); p.style.setProperty('--r', (Math.random() * 720 - 360) + 'deg');
+    p.style.animationDuration = (2.2 + Math.random() * 1.8) + 's'; p.style.animationDelay = (Math.random() * .8) + 's'; p.style.width = p.style.height = (16 + Math.random() * 16) + 'px';
+    ROOT.appendChild(p); setTimeout(() => p.remove(), 5000);
+  }
+  const close = () => { el.style.transition = 'opacity .25s'; el.style.opacity = 0; setTimeout(() => el.remove(), 260); S.freshTree = S.pendingFresh; S.pendingFresh = null; if (S.tab === 'bagh' && S.baghMode === 'mine') { S.lastView = 'bagh-refresh'; render(); } };
+  el.querySelector('#see-bagh').onclick = () => { S.baghMode = 'mine'; if (S.tab !== 'bagh') { S.freshTree = S.pendingFresh; S.pendingFresh = null; el.remove(); setTab('bagh'); } else close(); };
+  el.querySelector('#close-cel').onclick = close;
+  el.onclick = e => { if (e.target === el) close(); };
+  el.querySelector('#see-bagh').focus();
+}
+
+/* ================= the bagh: a Mughal char-bagh that grows with your rides ================= */
+const SPECIES = ['neem','amaltas','sarv','jacaranda'];
+const spAt = k => SPECIES[(Math.floor(k / 4) + k) % 4];
+function treeSVG(sp, x, y) {
+  const trunk = `<path d="M${x-2} ${y} L${x-1.6} ${y-13} L${x+1.6} ${y-13} L${x+2} ${y}Z" fill="#7A4A1E" stroke="#061D7B" stroke-width="1.2"/>`;
+  const c = (cx, cy, r, f) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${f}" stroke="#061D7B" stroke-width="1.5"/>`;
+  if (sp === 'sarv') return `<path d="M${x-1.5} ${y} L${x-1.5} ${y-6} L${x+1.5} ${y-6} L${x+1.5} ${y}Z" fill="#7A4A1E"/><path d="M${x} ${y-4} C${x-9} ${y-12} ${x-7} ${y-30} ${x} ${y-40} C${x+7} ${y-30} ${x+9} ${y-12} ${x} ${y-4}Z" fill="#0F6B3A" stroke="#061D7B" stroke-width="1.5"/><path d="M${x} ${y-10} L${x} ${y-32}" stroke="#2E9E4F" stroke-width="1.6" stroke-linecap="round"/>`;
+  if (sp === 'jacaranda') return trunk + c(x-7, y-17, 8.5, '#9C7BE0') + c(x+7, y-17, 8.5, '#9C7BE0') + c(x, y-25, 9.5, '#B39AF0') + `<circle cx="${x-4}" cy="${y-24}" r="1.6" fill="#E6007E"/><circle cx="${x+6}" cy="${y-19}" r="1.6" fill="#E6007E"/><circle cx="${x-8}" cy="${y-15}" r="1.4" fill="#fff"/>`;
+  if (sp === 'amaltas') return trunk + c(x-7, y-17, 8.5, '#3DAA57') + c(x+7, y-17, 8.5, '#3DAA57') + c(x, y-25, 9.5, '#56BE69') + [[-9,-11],[-3,-9],[4,-10],[10,-12]].map(([dx, dy]) => `<ellipse cx="${x+dx}" cy="${y+dy}" rx="1.8" ry="3.4" fill="#FFC72C" stroke="#061D7B" stroke-width=".8"/>`).join('');
+  return trunk + c(x-7, y-17, 8.5, '#2E9E4F') + c(x+7, y-17, 8.5, '#2E9E4F') + c(x, y-25, 9.5, '#3DB35E') + `<circle cx="${x-3}" cy="${y-28}" r="2.6" fill="#9BD14B"/>`;
+}
+function birdSVG(x, y, body, d, flip) {
+  return `<g transform="translate(${x} ${y})${flip ? ' scale(-1 1)' : ''}"><g class="bob" style="--d:${d}s"><path d="M-6 1 L-11 -1 L-6 -2Z" fill="${body}" stroke="#061D7B" stroke-width=".8"/><ellipse cx="0" cy="0" rx="6" ry="4" fill="${body}" stroke="#061D7B" stroke-width="1.1"/><circle cx="5" cy="-3.5" r="3" fill="${body}" stroke="#061D7B" stroke-width="1.1"/><path d="M7.6 -3.8 L10.5 -3 L7.6 -2.2Z" fill="#E4002B"/><circle cx="5.6" cy="-4" r=".8" fill="#061D7B"/></g></g>`;
+}
+function burstSVG(x, y, n) {
+  let s = ''; for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, d = 30 + (i % 3) * 8;
+    s += `<g transform="translate(${x} ${y})"><path class="burst" style="--dx:${(Math.cos(a)*d).toFixed(1)}px;--dy:${(Math.sin(a)*d).toFixed(1)}px" d="M0 0 C 3 -4 8 -4 11 0 C 8 4 3 4 0 0Z" fill="${['#2E9E4F','#9BD14B','#E6007E','#FFC72C'][i % 4]}" stroke="#061D7B" stroke-width=".6"/></g>`; }
+  return s;
+}
+const QUAD = [{x:18,y:18,ix:3,iy:3},{x:195,y:18,ix:0,iy:3},{x:18,y:195,ix:3,iy:0},{x:195,y:195,ix:0,iy:0}];
+const PLOTS = (() => { const order = []; for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) order.push([r, c]);
+  const out = []; const per = QUAD.map(q => order.slice().sort((a, b) => (Math.hypot(a[0]-q.iy, a[1]-q.ix) - Math.hypot(b[0]-q.iy, b[1]-q.ix)) || (a[0]-b[0]) || (a[1]-b[1])));
+  for (let i = 0; i < 16; i++) for (let q = 0; q < 4; q++) { const [r, c] = per[q][i]; out.push({x:QUAD[q].x + 20 + c * 36, y:QUAD[q].y + 36 + r * 36, i}); }
+  return out; })();
+function baghScene(count, {fresh = -1, progress = 0} = {}) {
+  const shown = Math.min(count, PLOTS_MAX);
+  let s = `<svg class="bagh-svg" viewBox="0 0 360 360" role="img" aria-label="${count} tree${count === 1 ? '' : 's'} growing in a Mughal-style garden">`;
+  s += `<rect x="3" y="3" width="354" height="354" rx="16" fill="#E8D9B5"/>`;
+  QUAD.forEach(q => { s += `<rect x="${q.x}" y="${q.y}" width="147" height="147" rx="8" fill="#C7E9B4" stroke="#0F6B3A" stroke-width="2"/>`;
+    let dots = ''; for (let t = 0; t < 4; t++) for (let j = 0; j < 12; j++) { const u = 8 + j * 11.8; const [dx, dy] = [[u, 5],[142, u],[147 - u, 142],[5, 147 - u]][t]; dots += `<circle cx="${(q.x+dx).toFixed(1)}" cy="${(q.y+dy).toFixed(1)}" r="${j % 2 ? 1.8 : 2.4}" fill="${['#E6007E','#FFC72C','#FFFFFF'][(j + t) % 3]}"/>`; }
+    s += dots; });
+  s += `<rect x="171" y="12" width="18" height="336" fill="#14A3A8"/><rect x="12" y="171" width="336" height="18" fill="#14A3A8"/>`;
+  s += `<path class="shimmer" d="M180 14V346M14 180H346" stroke="#fff" stroke-width="2" stroke-dasharray="3 9" stroke-linecap="round" opacity=".8"/>`;
+  s += `<circle cx="180" cy="180" r="24" fill="#14A3A8" stroke="#061D7B" stroke-width="2.5"/>`;
+  for (let i = 0; i < 3; i++) s += `<circle class="fount" style="--d:${(i*0.85).toFixed(2)}s" cx="180" cy="180" r="14" fill="none" stroke="#fff" stroke-width="1.6"/>`;
+  s += `<path d="M180 168 l8.5 3.5 3.5 8.5 -3.5 8.5 -8.5 3.5 -8.5 -3.5 -3.5 -8.5 3.5 -8.5z" fill="#FFC72C" stroke="#061D7B" stroke-width="2"/><circle cx="180" cy="180" r="4" fill="#E6007E" stroke="#061D7B" stroke-width="1.2"/>`;
+  const items = PLOTS.map((p, k) => ({p, k})).sort((a, b) => a.p.y - b.p.y);
+  for (const {p, k} of items) {
+    if (k < shown) {
+      const sp = spAt(k), d = -((k * 0.37) % 3.8).toFixed(2), isFresh = k === fresh;
+      s += `<ellipse cx="${p.x}" cy="${p.y}" rx="10" ry="3" fill="#0F6B3A" opacity=".18"/>`;
+      s += `<g class="${isFresh ? 'tree-grow' : ''}" style="transform-origin:${p.x}px ${p.y}px"><g class="tree-sway" style="--d:${d}s;transform-origin:${p.x}px ${p.y}px"><g transform="translate(${p.x} ${p.y}) scale(1.3) translate(${-p.x} ${-p.y})">${treeSVG(sp, p.x, p.y)}</g></g></g>`;
+      if (isFresh) s += burstSVG(p.x, p.y - 20, 8);
+    } else if (k === shown && count < PLOTS_MAX) {
+      const r = 9, C2 = 2 * Math.PI * r;
+      s += `<g><circle cx="${p.x}" cy="${p.y-10}" r="${r}" fill="#fff" opacity=".7"/><circle cx="${p.x}" cy="${p.y-10}" r="${r}" fill="none" stroke="#C9D6BE" stroke-width="3"/><circle cx="${p.x}" cy="${p.y-10}" r="${r}" fill="none" stroke="#E6007E" stroke-width="3" stroke-linecap="round" stroke-dasharray="${(C2*progress).toFixed(1)} ${C2.toFixed(1)}" transform="rotate(-90 ${p.x} ${p.y-10})"/><path class="sapling-glow" d="M${p.x} ${p.y-4} v-8 M${p.x} ${p.y-9} c-4 0 -5 -3 -5 -5 4 0 5 3 5 5z M${p.x} ${p.y-10} c4 0 5 -3 5 -5 -4 0 -5 3 -5 5z" fill="#2E9E4F" stroke="#0F6B3A" stroke-width="1.2"/></g>`;
+    } else s += `<ellipse cx="${p.x}" cy="${p.y-2}" rx="7" ry="2.6" fill="#A47A4F" opacity=".35"/>`;
+  }
+  // birds on a few trees, a parakeet flying over, butterflies by the flowering trees
+  const perch = [0, 5, 11, 22, 37].filter(k => k < shown && spAt(k) !== 'sarv').slice(0, shown ? Math.min(3, 1 + Math.floor(shown / 6)) : 0);
+  perch.forEach((k, i) => { const p = PLOTS[k]; s += birdSVG(p.x + (i % 2 ? 5 : -5), p.y - 43, ['#14A3A8','#FFC72C','#E6007E'][i], (i * 0.6).toFixed(1), i % 2); });
+  if (shown >= 2) s += `<g class="flyer" style="--d:${shown > 10 ? 1 : 3}s"><g transform="scale(1.1)"><path d="M-8 0 L-14 3 L-8 2Z" fill="#2E9E4F"/><ellipse cx="0" cy="0" rx="8" ry="4" fill="#3DB35E" stroke="#061D7B" stroke-width="1"/><circle cx="7" cy="-2" r="3.4" fill="#3DB35E" stroke="#061D7B" stroke-width="1"/><path d="M9.6 -2.6 L12.4 -1 L9.6 0Z" fill="#E4002B"/><path class="flap" d="M-3 -1 L2 -1 L-1 -10Z" fill="#9BD14B" stroke="#061D7B" stroke-width=".8"/></g></g>`;
+  const flowering = PLOTS.slice(0, shown).filter((p, k) => spAt(k) === 'amaltas' || spAt(k) === 'jacaranda').slice(0, 2);
+  flowering.forEach((p, i) => { s += `<g transform="translate(${p.x + (i ? -17 : 17)} ${p.y - 36})"><g class="flutter" style="--d:${i * 1.3}s"><ellipse class="wing" cx="-3" cy="0" rx="3.5" ry="4.5" fill="${i ? '#FFC72C' : '#E6007E'}" stroke="#061D7B" stroke-width=".7"/><ellipse class="wing r" cx="3" cy="0" rx="3.5" ry="4.5" fill="${i ? '#FFC72C' : '#E6007E'}" stroke="#061D7B" stroke-width=".7"/><path d="M0 -4 V4" stroke="#061D7B" stroke-width="1.2"/></g></g>`; });
+  s += `<rect x="4" y="4" width="352" height="352" rx="15" fill="none" stroke="#061D7B" stroke-width="6"/><rect x="10" y="10" width="340" height="340" rx="11" fill="none" stroke="#FFC72C" stroke-width="2.5"/>`;
+  const fl = innerSVG(ART.flowerPink);
+  [[-6,-6],[318,-6],[-6,318],[318,318]].forEach(([x, y]) => s += `<g transform="translate(${x} ${y}) scale(.75)">${fl}</g>`);
+  return s + '</svg>';
+}
+function schoolCounts() {
+  const people = [...allRiders()]; if (S.me) people.push({id:'me', name:S.me.name, pt:S.me.pt, x:S.me.x, y:S.me.y, co2:shareCO2()});
+  const co2 = people.reduce((s, p) => s + (p.co2 || 0), 0);
+  people.sort((a, b) => roadDist(b.pt, schoolPt) - roadDist(a.pt, schoolPt));
+  const used = new Set(); let cars = 0, pools = 0, kmDay = 0;
+  for (const p of people) {
+    if (used.has(p.id)) continue; used.add(p.id); const dP = roadDist(p.pt, schoolPt);
+    const cand = people.filter(q => !used.has(q.id) && Math.hypot(q.x - p.x, q.y - p.y) < 2500).map(q => ({q, d:roadDist(p.pt, q.pt) + roadDist(q.pt, schoolPt) - dP})).sort((a, b) => a.d - b.d).slice(0, MAX_POOL - 1).map(o => o.q);
+    cand.forEach(q => used.add(q.id));
+    if (cand.length) { pools++; cars += cand.length; kmDay += planPool([p, ...cand]).savedKmDay; }
+  }
+  return {students:people.length, co2, trees:Math.floor(co2 / TREE_KG), cars, pools, yearTrees:Math.floor(kmDay * 190 / KM_PER_L * CO2_PER_L / TREE_KG)};
+}
+function renderBagh() {
+  const mine = S.baghMode === 'mine';
+  const segs = `<div class="seg" id="bagh-seg"><button data-m="mine" aria-pressed="${mine}">My bagh</button><button data-m="school" aria-pressed="${!mine}">Garden Town's bagh</button></div>`;
+  if (mine) {
+    const co2 = poolCO2(), trees = myTrees(), rem = co2 % TREE_KG, rides = S.stats.rides.length;
+    const L = S.stats.rides.reduce((s, r) => s + r.km, 0) / KM_PER_L, fresh = S.freshTree != null ? S.freshTree : -1; S.freshTree = null;
+    const perRide = S.M && S.M.plan ? S.M.plan.co2Day : 0, need = perRide > 0 ? Math.ceil((TREE_KG - rem) / perRide) : 0;
+    setView(`${segs}
+    <div class="bagh-head"><div class="stack" style="gap:2px"><p class="eyebrow">YOUR CARPOOL'S GARDEN</p><h1>You've grown <em data-count="${trees}">${trees}</em> tree${trees === 1 ? '' : 's'}</h1></div><span class="ur" lang="ur" style="color:#0F6B3A;font-size:1.15rem;white-space:nowrap">میرا باغ</span></div>
+    <p class="sub">Each one is a real tree Beaconhouse plants for you, one for every ${TREE_KG} kg of CO₂ your rides keep out of Lahore's air.</p>
+    <div class="bagh-wrap">${baghScene(trees, {fresh, progress:rem / TREE_KG})}${trees > PLOTS_MAX ? `<span class="plus-more">+${trees - PLOTS_MAX} more</span>` : ''}</div>
+    <div class="card ride" style="gap:10px">
+      <div class="progress"><img src="${FL.gold}" alt=""><div class="bar"><i id="tree-bar"></i></div><small>${fmt(rem, 1)} / ${TREE_KG} kg</small></div>
+      <p>${!S.me ? 'Put yourself on the map and join a carpool to plant your first tree.' : perRide ? `About <b>${need} more shared ride${need === 1 ? '' : 's'}</b> until tree #${trees + 1}.` : 'Join a carpool on the Route tab to start growing.'}</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><b data-count="${co2}" data-dec="1" data-post=" kg">0</b><span>CO₂ kept out of the air</span></div>
+      <div class="stat"><b data-count="${rides}">0</b><span>shared rides logged</span></div>
+      <div class="stat"><b data-count="${L}" data-dec="1" data-post=" L">0</b><span>petrol not burnt</span></div>
+      <div class="stat"><b data-count="${L * FUEL_PRICE}" data-pre="Rs " data-fmt="rs">0</b><span>saved by pool families</span></div>
+    </div>
+    <div class="card pledge"><h2>How your bagh becomes real</h2><ol>
+      <li><i>1</i><span><b>Ride together.</b> Stamp each shared school run on the Route tab.</span></li>
+      <li><i>2</i><span><b>Every ${TREE_KG} kg of CO₂ saved grows a tree here.</b> That's about what one grown tree absorbs in a year.</span></li>
+      <li><i>3</i><span><b>Beaconhouse plants it for real</b> in the school's spring and monsoon planting drives, and your tree joins Lahore's gardens.</span></li></ol></div>
+    ${S.me && perRide ? `<button class="demo" id="demo">Presenting? Fast-forward a week of rides</button>` : ''}`, 'bagh-mine');
+    requestAnimationFrame(() => { const b = $('#tree-bar'); if (b) b.style.width = (rem / TREE_KG * 100).toFixed(1) + '%'; });
+    const dm = $('#demo'); if (dm) dm.onclick = () => logPast(5);
+  } else {
+    const c = schoolCounts(), exN = examplesOn() ? EXAMPLES.length : 0;
+    setView(`${segs}
+    <div class="bagh-head"><div class="stack" style="gap:2px"><p class="eyebrow">BEACONHOUSE GARDEN TOWN</p><h1><em data-count="${c.trees}">${c.trees}</em> trees and growing</h1></div><span class="ur" lang="ur" style="color:#0F6B3A;font-size:1.15rem;white-space:nowrap">باغوں کا شہر</span></div>
+    <p class="sub">Lahore is the City of Gardens. Every Beacon Pool ride at our campus adds to this one, and each tree here is planted for real.</p>
+    <div class="bagh-wrap">${baghScene(c.trees, {progress:(c.co2 % TREE_KG) / TREE_KG})}${c.trees > PLOTS_MAX ? `<span class="plus-more">+${c.trees - PLOTS_MAX} more</span>` : ''}</div>
+    <div class="stats">
+      <div class="stat"><b data-count="${c.students}">0</b><span>students on Beacon Pool</span></div>
+      <div class="stat"><b data-count="${c.cars}">0</b><span>fewer cars at the gate each morning</span></div>
+      <div class="stat"><b data-count="${c.co2}" data-post=" kg">0</b><span>CO₂ saved so far</span></div>
+      <div class="stat"><b data-count="${c.yearTrees}">0</b><span>trees a year if every pool rides daily</span></div>
+    </div>
+    <label class="switch" for="ex-tg"><span>Include example classmates<br><span class="fine">${c.students - exN} real student${c.students - exN === 1 ? '' : 's'} so far</span></span><input type="checkbox" id="ex-tg" ${examplesOn() ? 'checked' : ''}></label>`, 'bagh-school');
+    $('#ex-tg').onchange = e => { S.showEx = e.target.checked; store.set('showEx', S.showEx); render(); };
+  }
+  $('#bagh-seg').onclick = e => { const b = e.target.closest('[data-m]'); if (!b || b.dataset.m === S.baghMode) return; S.baghMode = b.dataset.m; render(); };
+}
+
+/* ================= gup shup ================= */
+function threads() {
+  const t = new Map();
+  for (const m of S.msgs.values()) { const other = m.from === S.uid ? m.to : m.from; (t.get(other) || t.set(other, []).get(other)).push(m); }
+  for (const [id, list] of Object.entries(S.exMsgs)) if (list.length) t.set(id, list);
+  for (const l of t.values()) l.sort((a, b) => a.ts - b.ts);
+  return [...t.entries()].sort((a, b) => b[1][b[1].length-1].ts - a[1][a[1].length-1].ts);
+}
+const isMine = m => m.from === S.uid || m.from === 'me';
+const unread = (id, list) => list.some(m => !isMine(m) && m.ts > (S.seen[id] || 0));
+function updateBadge() { const n = threads().filter(([id, l]) => !(S.tab === 'chats' && S.chatWith === id) && unread(id, l)).length; const b = $('#badge'); b.hidden = !n; b.textContent = n; }
+const bandColor = id => ['#FFB3D9','#7FD6D9','#FFE08A','#C7E9B4'][hash(id) % 4];
+function msgHTML(m, id, isNew) {
+  const r = riderById(id), cls = isNew ? ' new' : '';
+  const time = new Date(m.ts).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+  if (m.sticker && STICKERS[m.sticker]) { const k = STICKERS[m.sticker];
+    return `<div class="sticker${isMine(m) ? ' mine-s' : ''}${cls}" style="background:${k.c}"><span class="ur" lang="ur">${k.ur}</span><small>${k.en}</small></div>`; }
+  if (isMine(m)) return `<div class="mine${cls}">${esc(m.text)}<span class="tm">${time}</span></div>`;
+  return `<div class="panel${cls}"><div class="band" style="background:${bandColor(id)}">${esc(r ? r.name : 'Classmate')}<i></i></div><div class="body">${esc(m.text)}<span class="tm">${time}</span></div></div>`;
+}
+function renderChats() {
+  if (S.chatWith) return renderThread(S.chatWith);
+  const list = threads(), near = S.M ? S.M.cands.slice(0, 4) : [];
+  setView(`<div class="stack" style="gap:2px"><p class="eyebrow">CARPOOL PLANS</p><h1>Gup Shup</h1><p class="ur-sub" lang="ur">گپ شپ</p></div>
+  ${list.length ? `<div class="threads">${list.map(([id, l]) => { const r = riderById(id), last = l[l.length-1];
+    return `<button class="thread" data-open="${esc(id)}"><div class="fav"><img src="${FL.teal}" alt=""><b>${esc(initials(r ? r.name : '?').slice(0,1))}</b></div><div style="min-width:0"><b style="color:#061D7B">${esc(r ? r.name : 'Classmate')}</b>${r && r.example ? ' <span class="tag ex">Example</span>' : ''}<p>${isMine(last) ? 'You: ' : ''}${last.sticker ? 'Sticker: ' + STICKERS[last.sticker].en.toLowerCase() : esc(last.text)}</p></div>${unread(id, l) ? '<span class="dot" aria-label="New message"></span>' : '<span></span>'}</button>`; }).join('')}</div>`
+  : `<div class="empty"><img src="${FL.pink}" alt=""><b>No chats yet</b><span>${S.me ? 'Say salam to a classmate near you.' : 'Put yourself on the map first, then message classmates near you.'}</span></div>`}
+  ${!list.length && near.length ? `<div class="stack"><h2>Start with someone near you</h2><div class="threads">${near.map(n => `<button class="thread" data-open="${esc(n.r.id)}"><div class="fav"><img src="${FL.teal}" alt=""><b>${esc(initials(n.r.name).slice(0,1))}</b></div><div style="min-width:0"><b style="color:#061D7B">${esc(n.r.name)}</b>${n.r.example ? ' <span class="tag ex">Example</span>' : ''}<p>near ${esc(n.r.area)} · ${fmt(n.road/1000, 1)} km</p></div><span></span></button>`).join('')}</div></div>` : ''}
+  <p class="safety"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#13915A" stroke-width="2.4" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6l-8-3Z"/></svg>Keep chats to carpool plans. Share your exact address only after your parents have talked.</p>`, 'chats');
+  view.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { S.chatWith = b.dataset.open; render(); });
+}
+function renderThread(id, newKey) {
+  const r = riderById(id), list = (threads().find(([k]) => k === id) || [, []])[1];
+  S.seen[id] = Date.now(); store.set('seen', S.seen);
+  const canSend = (r && r.example) || (S.db && S.uid && S.me);
+  setView(`<div class="chat">
+    <div class="chat-head"><button class="icon-btn" id="back" aria-label="Back to chats"><svg viewBox="0 0 24 24" fill="none" stroke="#061D7B" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <div class="fav" style="width:42px;height:42px"><img src="${FL.teal}" alt="" style="width:42px;height:42px"><b style="left:12px;top:12px;width:18px;height:18px;line-height:14px">${esc(initials(r ? r.name : '?').slice(0,1))}</b></div>
+      <div style="min-width:0"><b style="color:#061D7B;font-size:1.05rem">${esc(r ? r.name : 'Classmate')}</b> ${r && r.example ? '<span class="tag ex">Example</span>' : ''}<div class="where">${r ? `${esc(r.cls)} · near ${esc(r.area)}` : ''}</div></div></div>
+    <div class="msgs" id="msgs">${list.length ? list.map((m, i) => msgHTML(m, id, newKey && i === list.length - 1)).join('') : `<div class="empty"><img src="${FL.gold}" alt=""><b>Say salam!</b><span>Send a sticker or pick a starter below.</span></div>`}<div class="typing" id="typing" hidden><i></i><i></i><i></i></div></div>
+    ${canSend ? `<div class="composer">
+      <div class="stick-tray">${Object.entries(STICKERS).map(([k, s]) => `<button class="stk" data-stk="${k}" style="background:${s.c}" aria-label="Send sticker: ${esc(s.en.toLowerCase())}">${s.ur}</button>`).join('')}${QUICK.map(q => `<button class="qr" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+      <form id="composer"><input class="input" id="msg-in" maxlength="400" placeholder="Kuch likho… write something" autocomplete="off" aria-label="Message ${esc(r ? r.name : '')}"><button class="send" type="submit" aria-label="Send"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#061D7B" stroke-width="2.6" stroke-linejoin="round"><path d="M3 11l18-8-6 18-3-7z"/></svg></button></form>
+    </div>` : `<p class="safety">${!S.me ? 'Put yourself on the map first, then you can message classmates.' : 'Open Beacon Pool while signed in to message real classmates.'}</p>`}
+  </div>`, 'thread-' + id);
+  $('#back').onclick = () => { S.chatWith = null; render(); };
+  requestAnimationFrame(() => { view.scrollTop = view.scrollHeight; });
+  const f = $('#composer'); if (!f) return;
+  f.onsubmit = e => { e.preventDefault(); const v = $('#msg-in').value.trim(); if (v) { $('#msg-in').value = ''; send(id, {text:v}); } };
+  view.querySelectorAll('[data-q]').forEach(b => b.onclick = () => send(id, {text:b.dataset.q}));
+  view.querySelectorAll('[data-stk]').forEach(b => b.onclick = () => send(id, {sticker:b.dataset.stk}));
+}
+async function send(id, msg) {
+  const r = riderById(id);
+  if (r && r.example) {
+    const l = S.exMsgs[id] || (S.exMsgs[id] = []); l.push({from:'me', ts:Date.now(), ...msg}); store.set('exmsgs', S.exMsgs); renderThread(id, true);
+    setTimeout(() => { const t = $('#typing'); if (t && S.chatWith === id) { t.hidden = false; view.scrollTop = view.scrollHeight; } }, 500);
+    setTimeout(() => { const reply = EX_REPLIES[(l.filter(m => m.from !== 'me').length) % EX_REPLIES.length]; l.push({from:id, ts:Date.now(), ...reply}); store.set('exmsgs', S.exMsgs);
+      if (S.tab === 'chats' && S.chatWith === id) renderThread(id, true); else { updateBadge(); toast(`${r.name} replied in Gup Shup`); } }, 1700);
+    return;
+  }
+  try { const ref = S.db.collection('messages').doc(); const m = {from:S.uid, to:id, ts:Date.now(), text:(msg.text || '').slice(0, 400), ...(msg.sticker ? {sticker:msg.sticker} : {})}; S.msgs.set(ref.id, m); renderThread(id, true); await ref.set(m); }
+  catch { toast("Message didn't send. Check your connection and try again."); }
+}
+
+/* ================= live data ================= */
+async function connect() {
+  const use = n => (window.claude && window.claude.use) ? window.claude.use(n).catch(() => null) : Promise.resolve(null);
+  const [db, user] = await Promise.all([use('db'), use('user')]);
+  S.uid = user ? await user.id() : null;
+  if (!db) return;
+  S.db = db;
+  if (user) { const c = await user.can('data.write'); if (c === false) S.canWrite = false; }
+  if (S.uid) {
+    try { const snap = await db.doc('data/users/' + S.uid + '/stats').get(); const v = snap.exists && snap.data(); if (v && Array.isArray(v.rides) && v.rides.length > S.stats.rides.length) { S.stats = {rides:v.rides.filter(r => r && typeof r.co2 === 'number').slice(-400)}; store.set('stats', S.stats); } } catch {}
+  }
+  const quietRender = () => { if (S.revealing || placing() || (S.tab === 'route' && S.step === 2 && (!S.me || S.editing)) || (S.tab === 'chats' && S.chatWith)) { S.M = model(); draw(); } else render(); };
+  db.collection('riders').onSnapshot(snap => {
+    S.riders.clear();
+    for (const d of snap.docs) { const v = d.data(); if (!v || typeof v.lat !== 'number') continue;
+      const p = toXY(v.lat, v.lon), role = v.role === 'ride' ? 'ride' : 'drive';
+      S.riders.set(d.id, {id:d.id, name:String(v.name || 'Classmate').slice(0, 20), cls:String(v.cls || ''), role, seats:Math.max(0, Math.min(6, +v.seats || (role === 'drive' ? 3 : 0))), taken:Math.max(0, +v.taken || 0), inCar:typeof v.inCar === 'string' ? v.inCar : null, x:p.x, y:p.y, area:String(v.area || areaOf(p.x, p.y)), co2:Math.max(0, +v.co2 || 0), pt:mkPt(p.x, p.y)}); }
+    if (S.uid && S.me && !S.riders.has(S.uid)) S.sharedSig = null;
+    quietRender();
+  }, () => {});
+  if (S.uid) {
+    db.collection('requests').onSnapshot(snap => {
+      const before = new Map([...S.reqs.values()].filter(q => !q.ex).map(q => [q.id, q.status]));
+      for (const id of [...S.reqs.keys()]) if (!S.reqs.get(id).ex) S.reqs.delete(id);
+      for (const d of snap.docs) { const v = d.data(); if (!v || !['invite','ask'].includes(v.kind)) continue;
+        S.reqs.set(d.id, {id:d.id, from:String(v.from), to:String(v.to), kind:v.kind, status:String(v.status || 'pending'), ts:+v.ts || 0}); }
+      for (const q of S.reqs.values()) { if (q.ex) continue; const was = before.get(q.id);
+        if (was === 'pending' && q.status === 'accepted' && isMe(q.from)) { const r = riderById(q.to); if (r) toast(`${r.name} said yes! You're carpooling now.`); }
+        if (was === undefined && q.status === 'pending' && isMe(q.to) && before.size) { const r = riderById(q.from); if (r) toast(q.kind === 'ask' ? `${r.name} wants a ride in your car!` : `${r.name} can drive you to school!`); } }
+      quietRender();
+    }, () => {});
+    const onMsgs = snap => { let fresh = false; for (const d of snap.docs) { const v = d.data(); if (v && (typeof v.text === 'string')) { if (!S.msgs.has(d.id)) fresh = true; S.msgs.set(d.id, {from:v.from, to:v.to, text:v.text.slice(0, 400), sticker:STICKERS[v.sticker] ? v.sticker : undefined, ts:+v.ts || 0}); } }
+      if (S.tab === 'chats') { if (S.chatWith) { if (fresh) renderThread(S.chatWith, true); } else render(); } else updateBadge(); };
+    db.collection('messages').where('to', '==', S.uid).onSnapshot(onMsgs, () => {});
+    db.collection('messages').where('from', '==', S.uid).onSnapshot(onMsgs, () => {});
+  }
+  if (S.tab === 'route' && S.step === 2 && !S.me) render();
+}
+
+/* ================= boot ================= */
+if (PHONE) { document.documentElement.classList.add('phone'); if (innerWidth >= 600) document.documentElement.classList.add('framed'); }
+resize(); render();
+const splash = $('#splash'), first = !S.me;
+function closeSplash() {
+  if (splash.classList.contains('out')) return;
+  splash.classList.add('out'); setTimeout(() => splash.remove(), 650);
+  A.school = performance.now() + 250;
+  if (S.me) { route = null; S.routeKey = null; S.M = model(); const t = performance.now(); (S.M ? S.M.cands : []).forEach((n, i) => A.pops.set(n.r.id, t + 500 + i * 90));
+    fitCurrent().then(() => { render(true); setTimeout(demoRequest, 6000); }); }
+  else flyTo(SCHOOL.x - 1500, SCHOOL.y + 1900, .085, 1300);
+}
+$('#go').onclick = closeSplash;
+if (first) $('#go').textContent = 'Find my carpool'; else { $('#go').textContent = 'Let’s go, ' + S.me.name; setTimeout(closeSplash, REDUCED ? 0 : 2300); }
+if (REDUCED && !first) closeSplash();
+connect();
+})();
+</script>
