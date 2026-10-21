@@ -8,6 +8,7 @@ build time so the site loads with no other requests besides Google Fonts.
 """
 import json
 import pathlib
+import urllib.parse
 
 ROOT = pathlib.Path(__file__).parent
 SRC, ART, OUT = ROOT / "src", ROOT / "src" / "art", ROOT / "public"
@@ -29,7 +30,7 @@ HEAD = f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#061D7B">
 <meta name="color-scheme" content="light">
 <meta name="description" content="{DESCRIPTION}">
@@ -65,6 +66,10 @@ def main():
     roads = (SRC / "data" / "lahore-roads.json").read_text()
     app = (app.replace("/*ART*/", json.dumps(art).replace("</", "<\\/"))
               .replace("/*GRAPH*/", roads.replace("</", "<\\/")))
+    # Urdu font: ask Google Fonts for just the letters the app uses (a few KB instead of a large file)
+    urdu = sorted({ch for ch in app if "\u0600" <= ch <= "\u06ff" or ch in " !"})
+    app = app.replace("/*URDU_FONT*/", "https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu&display=swap&text="
+                      + urllib.parse.quote("".join(urdu)))
     for old, new in WEB_COPY.items():
         assert old in app, old
         app = app.replace(old, new)

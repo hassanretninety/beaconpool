@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#061D7B">
 <meta name="color-scheme" content="light">
 <meta name="description" content="Beacon Pool: carpools for Beaconhouse Garden Town, Lahore. Find classmates near you, share the school run, and grow a bagh of real trees with every ride.">
@@ -30,7 +30,8 @@
 <title>Beacon Pool</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu&display=swap&text=%20%21%D8%8C%D8%9F%D8%A2%D8%A4%D8%A6%D8%A7%D8%A8%D8%AA%D8%AC%D8%AF%D8%B1%D8%B3%D8%B4%D8%BA%D9%81%D9%84%D9%85%D9%86%D9%88%D9%B9%D9%BE%DA%86%DA%A9%DA%AF%DA%BA%DA%BE%DB%81%DB%8C%DB%92">
 <style>
 /* Layout: one-screen app. Truck-art header + Lahore map + a leafy sheet (left column on desktop, bottom sheet on phones). Deliberately single-theme: bright truck-art on cream, like painted rickshaw panels. */
 :root{
@@ -91,10 +92,13 @@ p{margin:0}
 .pin.lift .pin-tip{opacity:0;transform:translateY(6px)}
 
 .sheet{grid-area:stage;margin-top:-22px;min-height:0;position:relative;z-index:4;background-color:var(--leaf-bg);background-size:150px 150px;border-radius:24px 24px 0 0;box-shadow:0 -10px 26px rgba(6,29,123,.16);display:flex;flex-direction:column;transition:margin-top .55s var(--ease-out),border-radius .4s}
-.handle{flex:none;width:44px;height:5px;border-radius:3px;background:rgba(6,29,123,.22);margin:9px auto 0}
+.handle{flex:none;align-self:center;width:96px;height:26px;margin:0 auto -6px;border:0;background:none;padding:0;cursor:grab;touch-action:none;position:relative}
+.handle::before{content:"";position:absolute;left:26px;right:26px;top:10px;height:5px;border-radius:3px;background:rgba(6,29,123,.25);transition:background .2s,transform .2s}
+.handle:active::before{background:rgba(6,29,123,.5);transform:scaleX(1.2)}
 .view{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:12px 16px 28px;display:flex;flex-direction:column;gap:16px;scroll-behavior:smooth}
-.app.full{--map-h:0%}
 .app.setup{--map-h:38%}
+.app.expanded{--map-h:17%}
+.app.full{--map-h:0%}
 .app.full .sheet{border-radius:0;margin-top:0}
 .app.full .handle{display:none}
 
@@ -157,7 +161,7 @@ p{margin:0}
 .privacy .ur{font-size:.95rem;color:var(--gold-soft);line-height:1.8}
 .sticky-cta{position:sticky;bottom:-28px;margin:0 -16px -28px;padding:12px 16px 16px;background:linear-gradient(rgba(244,250,238,0),var(--leaf-bg) 30%);display:flex;flex-direction:column;gap:6px;z-index:3}
 .stepper{display:flex;align-items:center;gap:14px}
-.stepper button{width:44px;height:44px;border-radius:50%;border:2.5px solid var(--navy);background:#fff;font-weight:800;font-size:1.2rem;color:var(--navy);transition:transform .12s}
+.stepper button{width:44px;height:44px;border-radius:50%;border:2.5px solid var(--navy);background:#fff;font-weight:700;font-size:1.2rem;color:var(--navy);transition:transform .12s}
 .stepper button:active{transform:scale(.9)}
 .stepper output{font-family:var(--f-display);font-size:1.6rem;min-width:2ch;text-align:center;color:var(--navy)}
 .row2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:10px}
@@ -460,7 +464,8 @@ html.framed .phone-notes{display:flex;flex-direction:column;gap:18px;max-width:3
 
 
 /* ---------- every screen: phones, phones sideways, 16:9 and 16:10 laptops, big monitors ---------- */
-@supports (height:100dvh){#root{height:100dvh}}
+html:not(.framed),html:not(.framed) body{position:fixed;inset:0;overflow:hidden}
+html:not(.framed) #root{position:fixed;inset:0;height:auto}
 #root{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);background:var(--navy)}
 .top{padding-top:env(safe-area-inset-top,0px)}
 .splash{padding-top:max(24px,env(safe-area-inset-top,0px));padding-bottom:max(24px,env(safe-area-inset-bottom,0px))}
@@ -474,6 +479,27 @@ input,select,textarea{font-size:max(16px,1rem)}
 @media (orientation:landscape) and (max-height:560px){:root:not(.phone) .tabs{padding:3px 6px}:root:not(.phone) .tab{padding:6px 4px}}
 /* big 16:9 and 16:10 monitors */
 @media (min-width:1600px) and (min-height:860px){body{font-size:16px}h1{font-size:1.6rem}.brand b{font-size:1.8rem}.view{padding:16px 22px 32px;gap:18px}}
+
+
+/* ---------- touch + mouse polish ---------- */
+button,a,input,select,.person{touch-action:manipulation}
+.view{scrollbar-width:thin;scrollbar-color:rgba(6,29,123,.3) transparent}
+.view::-webkit-scrollbar{width:8px}
+.view::-webkit-scrollbar-thumb{background:rgba(6,29,123,.28);border-radius:8px}
+.view::-webkit-scrollbar-track{background:transparent}
+@media (hover:hover) and (pointer:fine){
+  .btn:hover:not(:disabled){transform:translate(-1px,-1px);box-shadow:4px 4px 0 var(--navy)}
+  .btn.sm:hover:not(:disabled){box-shadow:3px 3px 0 var(--navy)}
+  .chip:hover:not([aria-pressed="true"]),.qr:hover{background:#FFF1CC}
+  .seg button:hover:not([aria-pressed="true"]),.mini-seg button:hover:not([aria-pressed="true"]){background:#EEF0F6;color:var(--navy)}
+  .role-card:hover:not([aria-pressed="true"]){background:#FFF8E1}
+  .tab:hover:not([aria-selected="true"]){color:#fff}
+  .thread:hover{box-shadow:4px 4px 0 var(--teal)}
+  .map-ctrl button:hover,.icon-btn:hover,.me-btn:hover{background:#FFF1CC}
+  .link:hover{text-decoration-color:var(--pink)}
+  .stk:hover{transform:translateY(-2px) rotate(-2deg)}
+  .day.today:hover{background:#FFD0E8}
+}
 
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 @media (max-width:380px){h1{font-size:1.25rem}.tile b{font-size:.98rem}.brand small{display:none}}
@@ -512,7 +538,7 @@ input,select,textarea{font-size:max(16px,1rem)}
   </main>
 
   <section class="sheet" id="sheet">
-    <div class="handle" aria-hidden="true"></div>
+    <button class="handle" id="handle" aria-label="Show more of the list" aria-expanded="false"></button>
     <div class="view" id="view"></div>
   </section>
 
@@ -613,7 +639,7 @@ function sssp(src) {
     for (let j = AS[u]; j < AS[u+1]; j++) { const e = AE[j], v = EA[e] === u ? EB[e] : EA[e], nd = d + EL[e]; if (nd < dist[v]) { dist[v] = nd; prev[v] = e; push(nd, v); } }
   }
   const r = {dist, prev}; ssspCache.set(src, r);
-  if (ssspCache.size > 300) ssspCache.delete(ssspCache.keys().next().value);
+  if (ssspCache.size > 60) ssspCache.delete(ssspCache.keys().next().value);
   return r;
 }
 function mkPt(x, y) { const n = nearestNode(x, y); return {x, y, node:n, conn:Math.hypot(NX[n]-x, NY[n]-y) * 1.3}; }
@@ -838,13 +864,14 @@ function model() {
 
 /* ================= sprites for the map ================= */
 const SPR = {};
-function sprite(key, svg) { const im = new Image(); im.onload = () => { SPR[key] = im; baseDirty = true; draw(); }; im.src = svgURL(svg); }
+function sprite(key, svg) { const im = new Image(); im.onload = () => { SPR[key] = im; draw(); }; im.src = svgURL(svg); }
 sprite('pink', ART.flowerPink); sprite('teal', ART.flowerTeal); sprite('gold', ART.flowerGold); sprite('rk', ART.rickshaw);
 
 /* ================= map ================= */
 const cv = $('#map'), wrap = $('#map-wrap'), ctx = cv.getContext('2d');
 const base = document.createElement('canvas'), bctx = base.getContext('2d');
-let W = 0, H = 0, DPR = 1, baseDirty = true, raf = 0;
+let W = 0, H = 0, DPR = 1, baseDirty = true, raf = 0, idleT = 0, baseV = null, baseStale = false, lastMove = 0;
+function moved() { baseStale = true; lastMove = performance.now(); draw(); }
 const V = {cx:SCHOOL.x - 600, cy:SCHOOL.y + 1200, s:0.05};
 const A = {drop:0, ripple:0, pops:new Map(), routeT0:0, routeDur:0, mover:false, pulse:new Map(), school:0};
 let route = null, poolOrder = [];
@@ -921,8 +948,17 @@ function carBadge(X, Y, full) {
 function frame() {
   raf = 0; if (W < 4 || H < 4) return;
   const now = performance.now(); let busy = false;
-  if (baseDirty) drawBase();
-  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(base, 0, 0);
+  let idle = false;
+  if (!baseDirty && baseStale && baseV) {
+    const k = V.s / baseV.s, off = Math.hypot(baseV.cx - V.cx, baseV.cy - V.cy) * V.s;
+    if (now - lastMove > 140 || Math.abs(Math.log(k)) > .35 || off > Math.max(W, H) * .45) baseDirty = true; else busy = true;
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (baseDirty || !baseV) { drawBase(); baseV = {...V}; baseStale = false; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(base, 0, 0); }
+  else if (baseStale) {
+    const k = V.s / baseV.s, dx = W/2 - k*W/2 + (baseV.cx - V.cx) * V.s, dy = H/2 - k*H/2 + (baseV.cy - V.cy) * V.s;
+    ctx.fillStyle = C.bg; ctx.fillRect(0, 0, cv.width, cv.height); ctx.setTransform(k, 0, 0, k, dx * DPR, dy * DPR); ctx.drawImage(base, 0, 0);
+  } else ctx.drawImage(base, 0, 0);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const M = S.M, hide = S.revealingHide, riders = allRiders();
   const order = route && route.style === 'car' ? route.ids : [];
@@ -931,13 +967,13 @@ function frame() {
     let prog = 1;
     if (A.routeDur) { prog = easeOut(clamp01((now - A.routeT0) / A.routeDur)); if (prog < 1) busy = true; else A.routeDur = 0; }
     const {head, dir} = strokeLine(route, prog, now, route.style);
-    if (!REDUCED && route.style === 'car') busy = true;
+    if (!REDUCED && route.style === 'car') idle = true;
     if (A.mover && SPR.rk) {
       if (prog >= 1 && now - A.routeT0 > A.routeDurOrig + 900) A.mover = false;
       else { const X = sx(head[0]), Y = sy(head[1]); ctx.save(); ctx.translate(X, Y - 14); if (dir > 0) ctx.scale(-1, 1); ctx.drawImage(SPR.rk, -28, -20, 56, 40); ctx.restore(); busy = true; }
     }
   }
-  if (S.previewLine) { strokeLine(S.previewLine, 1, now, 'preview'); if (!REDUCED) busy = true; }
+  if (S.previewLine) { strokeLine(S.previewLine, 1, now, 'preview'); if (!REDUCED) idle = true; }
   // classmates: people you can carpool with are flowers; everyone else stays a small dot
   for (const r of riders) {
     if (hide) break;
@@ -948,7 +984,7 @@ function frame() {
     const pend = M && M.pendingWith.has(r.id), sel = S.preview === r.id;
     const pulse = A.pulse.get(r.id);
     if (pulse) { const t = (now - pulse) / 900; if (t < 1) { ctx.beginPath(); ctx.arc(X, Y, 18 + 26 * t, 0, 7); ctx.strokeStyle = `rgba(230,0,126,${1 - t})`; ctx.lineWidth = 3; ctx.stroke(); busy = true; } else A.pulse.delete(r.id); }
-    if (pend || sel) { ctx.save(); ctx.translate(X, Y); ctx.rotate(REDUCED ? 0 : now / 900); ctx.setLineDash([5, 5]); ctx.beginPath(); ctx.arc(0, 0, 22, 0, 7); ctx.strokeStyle = C.pink; ctx.lineWidth = 2.5; ctx.stroke(); ctx.restore(); if (!REDUCED) busy = true; }
+    if (pend || sel) { ctx.save(); ctx.translate(X, Y); ctx.rotate(REDUCED ? 0 : now / 900); ctx.setLineDash([5, 5]); ctx.beginPath(); ctx.arc(0, 0, 22, 0, 7); ctx.strokeStyle = C.pink; ctx.lineWidth = 2.5; ctx.stroke(); ctx.restore(); if (!REDUCED) idle = true; }
     const sz = (inCar ? 40 : 32) * k, im = SPR[inCar ? 'pink' : 'teal'];
     if (im) ctx.drawImage(im, X - sz/2, Y - sz/2, sz, sz);
     ctx.beginPath(); ctx.arc(X, Y, 8.5 * k, 0, 7); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = C.navy; ctx.stroke();
@@ -987,7 +1023,9 @@ function frame() {
     ctx.beginPath(); ctx.arc(sx(f.x), sy(f.y), Math.max(R, 10), 0, 7); ctx.fillStyle = 'rgba(255,199,44,.25)'; ctx.fill();
     ctx.setLineDash([6, 5]); ctx.lineWidth = 2; ctx.strokeStyle = C.navy; ctx.stroke(); ctx.setLineDash([]);
   }
-  if (busy && !document.hidden) draw();
+  clearTimeout(idleT);
+  if (document.hidden) return;
+  if (busy) draw(); else if (idle) idleT = setTimeout(draw, 40);
 }
 
 function popScale(id, now) { const t0 = A.pops.get(id); if (t0 == null) return 1; const t = (now - t0) / 450; if (t <= 0) return 0; if (t >= 1) { A.pops.delete(id); return 1; } return easeBack(t); }
@@ -999,7 +1037,7 @@ function flyTo(cx, cy, s, ms = 700) {
     const a = {...V}, t0 = performance.now();
     const step = t => { const k = Math.min(1, (t - t0) / ms), e = k < .5 ? 4*k*k*k : 1 - Math.pow(-2*k + 2, 3) / 2;
       V.cx = a.cx + (cx - a.cx) * e; V.cy = a.cy + (cy - a.cy) * e; V.s = Math.exp(Math.log(a.s) + (Math.log(s) - Math.log(a.s)) * e);
-      baseDirty = true; draw(); if (k < 1) flyRaf = requestAnimationFrame(step); else { onMapMove(); res(); } };
+      if (k < 1) { moved(); flyRaf = requestAnimationFrame(step); } else { baseDirty = true; draw(); onMapMove(); res(); } };
     flyRaf = requestAnimationFrame(step);
   });
 }
@@ -1015,18 +1053,18 @@ function fitTo(pts, ms = 900, pad = 56) {
 }
 function zoomAt(px, py, f) {
   const x = wx(px), y = wy(py); V.s = clampS(V.s * f);
-  V.cx = x - (px - W/2) / V.s; V.cy = y - (py - H/2) / V.s; baseDirty = true; draw(); onMapMove();
+  V.cx = x - (px - W/2) / V.s; V.cy = y - (py - H/2) / V.s; moved(); onMapMove();
 }
-const ptrs = new Map(); let downAt = null, pinch = null, moved = false;
-cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.offsetX, e.offsetY]); cancelAnimationFrame(flyRaf);
-  if (ptrs.size === 1) { downAt = [e.offsetX, e.offsetY]; moved = false; } else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = {d:Math.hypot(a[0]-b[0], a[1]-b[1]), s:V.s}; moved = true; } });
+const ptrs = new Map(); let downAt = null, pinch = null, dragged = false;
+cv.addEventListener('pointerdown', e => { try { cv.setPointerCapture(e.pointerId); } catch {} ptrs.set(e.pointerId, [e.offsetX, e.offsetY]); cancelAnimationFrame(flyRaf);
+  if (ptrs.size === 1) { downAt = [e.offsetX, e.offsetY]; dragged = false; } else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = {d:Math.hypot(a[0]-b[0], a[1]-b[1]), s:V.s}; dragged = true; } });
 cv.addEventListener('pointermove', e => { if (!ptrs.has(e.pointerId)) return; const prev = ptrs.get(e.pointerId); ptrs.set(e.pointerId, [e.offsetX, e.offsetY]);
   if (ptrs.size === 2 && pinch) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a[0]-b[0], a[1]-b[1]); zoomAt((a[0]+b[0])/2, (a[1]+b[1])/2, clampS(pinch.s * d / pinch.d) / V.s); return; }
   if (ptrs.size === 1) { const dx = e.offsetX - prev[0], dy = e.offsetY - prev[1];
-    if (downAt && !moved && Math.hypot(e.offsetX - downAt[0], e.offsetY - downAt[1]) > 6) { moved = true; cv.classList.add('drag'); $('#pin').classList.add('lift'); }
-    if (moved) { V.cx -= dx / V.s; V.cy -= dy / V.s; baseDirty = true; draw(); onMapMove(); } } });
+    if (downAt && !dragged && Math.hypot(e.offsetX - downAt[0], e.offsetY - downAt[1]) > 6) { dragged = true; cv.classList.add('drag'); $('#pin').classList.add('lift'); }
+    if (dragged) { V.cx -= dx / V.s; V.cy -= dy / V.s; moved(); onMapMove(); } } });
 const up = e => { if (!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
-  if (ptrs.size === 0) { cv.classList.remove('drag'); const pin = $('#pin'); if (pin.classList.contains('lift')) { pin.classList.remove('lift'); markPlaced(); } if (!moved && downAt) onTap(e.offsetX, e.offsetY); downAt = null; } };
+  if (ptrs.size === 0) { cv.classList.remove('drag'); const pin = $('#pin'); if (pin.classList.contains('lift')) { pin.classList.remove('lift'); markPlaced(); } if (!dragged && downAt) onTap(e.offsetX, e.offsetY); downAt = null; } };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
 cv.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.offsetX, e.offsetY, Math.exp(-e.deltaY * 0.0018)); }, {passive:false});
 $('#zin').onclick = () => zoomAt(W/2, H/2, 1.6);
@@ -1067,7 +1105,7 @@ function countUps(animate) {
 }
 function setTab(t) {
   if (S.tab === t) { view.scrollTop = 0; return; }
-  S.tab = t; S.confirmRemove = false;
+  S.tab = t; S.confirmRemove = false; setExpanded(false);
   document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
   app.classList.toggle('full', t !== 'route');
   render();
@@ -1223,7 +1261,7 @@ function syncRoute(M, mover) {
   return true;
 }
 function setPreview(id) {
-  S.preview = S.preview === id ? null : id; S.previewLine = null;
+  S.preview = S.preview === id ? null : id; S.previewLine = null; if (S.preview) setExpanded(false);
   const M = S.M;
   if (S.preview && M) {
     const r = riderById(id);
@@ -1587,7 +1625,7 @@ function baghScene(count, {fresh = -1, progress = 0} = {}) {
     if (k < shown) {
       const sp = spAt(k), d = -((k * 0.37) % 3.8).toFixed(2), isFresh = k === fresh;
       s += `<ellipse cx="${p.x}" cy="${p.y}" rx="10" ry="3" fill="#0F6B3A" opacity=".18"/>`;
-      s += `<g class="${isFresh ? 'tree-grow' : ''}" style="transform-origin:${p.x}px ${p.y}px"><g class="tree-sway" style="--d:${d}s;transform-origin:${p.x}px ${p.y}px"><g transform="translate(${p.x} ${p.y}) scale(1.3) translate(${-p.x} ${-p.y})">${treeSVG(sp, p.x, p.y)}</g></g></g>`;
+      s += `<g class="${isFresh ? 'tree-grow' : ''}" style="transform-origin:${p.x}px ${p.y}px"><g class="${k % 2 && k > 12 ? '' : 'tree-sway'}" style="--d:${d}s;transform-origin:${p.x}px ${p.y}px"><g transform="translate(${p.x} ${p.y}) scale(1.3) translate(${-p.x} ${-p.y})">${treeSVG(sp, p.x, p.y)}</g></g></g>`;
       if (isFresh) s += burstSVG(p.x, p.y - 20, 8);
     } else if (k === shown && count < PLOTS_MAX) {
       const r = 9, C2 = 2 * Math.PI * r;
@@ -1768,6 +1806,28 @@ async function connect() {
   if (S.tab === 'route' && S.step === 2 && !S.me) render();
 }
 
+
+/* ================= sheet handle (phones): tap or swipe up for more list, down for more map ================= */
+const handle = $('#handle');
+function setExpanded(on) {
+  if (on && (S.tab !== 'route' || innerWidth >= 900)) on = false;
+  app.classList.toggle('expanded', on); handle.setAttribute('aria-expanded', on);
+  handle.setAttribute('aria-label', on ? 'Show more of the map' : 'Show more of the list');
+}
+let hy = null;
+handle.addEventListener('pointerdown', e => { hy = e.clientY; try { handle.setPointerCapture(e.pointerId); } catch {} });
+handle.addEventListener('pointerup', e => { if (hy == null) return; const dy = e.clientY - hy; hy = null;
+  setExpanded(Math.abs(dy) < 8 ? !app.classList.contains('expanded') : dy < 0); });
+handle.addEventListener('pointercancel', () => { hy = null; });
+handle.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(!app.classList.contains('expanded')); } });
+/* iPhone keyboard: Safari overlays it, so shrink the app to the visible area while typing */
+if (window.visualViewport && !document.documentElement.classList.contains('framed')) {
+  const vv = window.visualViewport;
+  const fitVV = () => { const kb = innerHeight - vv.height > 120 && vv.scale < 1.05;
+    ROOT.style.height = kb ? vv.height + 'px' : ''; ROOT.style.transform = kb && vv.offsetTop ? `translateY(${vv.offsetTop}px)` : ''; };
+  vv.addEventListener('resize', fitVV); vv.addEventListener('scroll', fitVV);
+}
+
 /* ================= boot ================= */
 if (PHONE) { document.documentElement.classList.add('phone'); if (innerWidth >= 600) document.documentElement.classList.add('framed'); }
 resize(); render();
@@ -1781,7 +1841,8 @@ function closeSplash() {
   else flyTo(SCHOOL.x - 1500, SCHOOL.y + 1900, .085, 1300);
 }
 $('#go').onclick = closeSplash;
-if (first) $('#go').textContent = 'Find my carpool'; else { $('#go').textContent = 'Let’s go, ' + S.me.name; setTimeout(closeSplash, REDUCED ? 0 : 2300); }
+if (first) $('#go').textContent = 'Find my carpool'; else { $('#go').textContent = 'Let’s go, ' + S.me.name; setTimeout(closeSplash, REDUCED ? 0 : 1400); }
+splash.addEventListener('click', e => { if (!e.target.closest('#go')) closeSplash(); });
 if (REDUCED && !first) closeSplash();
 connect();
 })();
